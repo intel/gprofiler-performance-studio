@@ -30,7 +30,7 @@ const areParamsDefined = (selectedService, timeSelection) => {
     return !_.isUndefined(selectedService) && !_.isUndefined(timeSelection);
 };
 
-const useGetServiceMemoryAndCpu = ({ resolution }) => {
+const useGetServiceMetrics = ({ resolution }) => {
     const { selectedService, timeSelection } = useContext(SelectorsContext);
     const { activeFilterTag } = useContext(FilterTagsContext);
     const metricsParams = {
@@ -41,9 +41,9 @@ const useGetServiceMemoryAndCpu = ({ resolution }) => {
 
     const timeParams = getStartEndDateTimeFromSelection(timeSelection);
     const {
-        data: memoryAndCpuData,
-        loading: memoryAndCupLoading,
-        run: callMemoryAndCpuGraph,
+        data: metricsData,
+        loading: metricsLoading,
+        run: callMetricsGraph,
     } = useFetchWithRequest(
         {
             url: DATA_URLS.GET_GRAPH_METRICS + '?' + stringify(_.assign({ ...timeParams }, metricsParams)),
@@ -55,10 +55,10 @@ const useGetServiceMemoryAndCpu = ({ resolution }) => {
     );
 
     return {
-        memoryAndCpuData: memoryAndCpuData,
-        memoryAndCupLoading,
-        callMemoryAndCpuGraph,
+        metricsData,
+        metricsLoading,
+        callMetricsGraph,
     };
 };
 
-export default useGetServiceMemoryAndCpu;
+export default useGetServiceMetrics;
