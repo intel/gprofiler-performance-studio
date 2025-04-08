@@ -70,6 +70,18 @@ class MetricSummary(Metric):
 class MetricGraph(Metric):
     uniq_hostnames: Optional[int]
     time: datetime
+    avg_frequency: Optional[float]
+    max_frequency: Optional[float]
+    avg_cpi_count: Optional[float]
+    max_cpi_count: Optional[float]
+    avg_tma_front_end_bound: Optional[float]
+    max_tma_front_end_bound: Optional[float]
+    avg_tma_backend_bound: Optional[float]
+    max_tma_backend_bound: Optional[float]
+    avg_tma_bad_spec: Optional[float]
+    max_tma_bad_spec: Optional[float]
+    avg_tma_retiring: Optional[float]
+    max_tma_retiring: Optional[float]
 
 
 class MetricNodesCoresSummary(BaseModel):

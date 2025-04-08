@@ -133,14 +133,26 @@ type SamplesCountByFunction struct {
 }
 
 type MetricsSummary struct {
-	AvgCpu           float64    `json:"avg_cpu"`
-	MaxCpu           float64    `json:"max_cpu"`
-	AvgMemory        float64    `json:"avg_memory"`
-	PercentileMemory float64    `json:"percentile_memory"`
-	MaxMemory        float64    `json:"max_memory"`
-	UniqHostnames    int        `json:"uniq_hostnames,omitempty"`
-	GroupedBy        *string    `json:"grouped_by,omitempty"`
-	Time             *time.Time `json:"time,omitempty"`
+	AvgCpu              float64    `json:"avg_cpu"`
+	MaxCpu              float64    `json:"max_cpu"`
+	AvgMemory           float64    `json:"avg_memory"`
+	MaxMemory           float64    `json:"max_memory"`
+	PercentileMemory    float64    `json:"percentile_memory"`
+	AvgFrequency        *float64   `json:"avg_frequency,omitempty"`
+	MaxFrequency        *float64   `json:"max_frequency,omitempty"`
+	AvgCPICount         *float64   `json:"avg_cpi_count,omitempty"`
+	MaxCPICount         *float64   `json:"max_cpi_count,omitempty"`
+	AvgTMAFrontEndBound *float64   `json:"avg_tma_front_end_bound,omitempty"`
+	MaxTMAFrontEndBound *float64   `json:"max_tma_front_end_bound,omitempty"`
+	AvgTMABackendBound  *float64   `json:"avg_tma_backend_bound,omitempty"`
+	MaxTMABackendBound  *float64   `json:"max_tma_backend_bound,omitempty"`
+	AvgTMABadSpec       *float64   `json:"avg_tma_bad_spec,omitempty"`
+	MaxTMABadSpec       *float64   `json:"max_tma_bad_spec,omitempty"`
+	AvgTMARetiring      *float64   `json:"avg_tma_retiring,omitempty"`
+	MaxTMARetiring      *float64   `json:"max_tma_retiring,omitempty"`
+	UniqHostnames       int        `json:"uniq_hostnames,omitempty"`
+	GroupedBy           *string    `json:"grouped_by,omitempty"`
+	Time                *time.Time `json:"time,omitempty"`
 }
 
 type MetricsCpuTrend struct {

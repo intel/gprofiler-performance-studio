@@ -21,7 +21,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/ClickHouse/clickhouse-go"
 	"log"
 	"math"
 	"regexp"
@@ -31,6 +30,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ClickHouse/clickhouse-go"
 )
 
 const (
@@ -268,6 +269,7 @@ func BuildConditions(ContainerName []string, HostName []string, InstanceType []s
 }
 
 func NewClickHouseClient(addr string) *ClickHouseClient {
+	fmt.Printf("clickhouse addres: %s\n\n", addr)
 	db, err := sql.Open("clickhouse", "tcp://"+addr)
 	if err != nil {
 		log.Fatal(err)
@@ -543,7 +545,7 @@ func (c *ClickHouseClient) FetchSampleCountByFunction(ctx context.Context, param
 			GROUP BY Datetime
 			ORDER BY Datetime DESC
 		)
-	
+
 		SELECT (function_samples.sum_cpu/all_samples.sum_cpu) AS Samples , all_samples.Datetime AS Datetime
 		FROM all_samples
 		LEFT JOIN function_samples ON function_samples.Datetime = all_samples.Datetime;
@@ -806,19 +808,35 @@ func (c *ClickHouseClient) FetchMetricsGraph(ctx context.Context, params common.
 		groupBy = fmt.Sprintf(", %s", params.GroupBy)
 	}
 	query := fmt.Sprintf(`
-		SELECT Datetime %s, arrayAvg(flatten(groupArray(CPUArray))), MAX(MaxCPU),
-			AVG(MaxMemory), MAX(MaxMemory), quantile(%f)(MaxMemory) FROM
-		(SELECT toStartOfInterval(Timestamp, INTERVAL '%s') as
-			Datetime %s,
-			HostName,
-			MAX(MemoryAverageUsedPercent) AS MaxMemory,
-			MAX(CPUAverageUsedPercent) as MaxCPU,
-			groupArray(CPUAverageUsedPercent) as CPUArray
-		FROM %s
-		WHERE ServiceId = %d AND (Datetime BETWEEN '%s' AND '%s') %s
-		GROUP BY Datetime %s, HostName) GROUP BY Datetime %s ORDER BY Datetime DESC;
+		SELECT Datetime %s,
+			arrayAvg(flatten(groupArray(CPUArray))), MAX(MaxCPU),
+			AVG(MaxMemory), MAX(MaxMemory), quantile(%f)(MaxMemory),
+			AVG(MaxFrequency), MAX(MaxFrequency),
+			AVG(MaxCPICount), MAX(MaxCPICount),
+			AVG(MaxTMAFrontEndBound), MAX(MaxTMAFrontEndBound),
+			AVG(MaxTMABackendBound), MAX(MaxTMABackendBound),
+			AVG(MaxTMABadSpec), MAX(MaxTMABadSpec),
+			AVG(MaxTMARetiring), MAX(MaxTMARetiring)
+		FROM (
+			SELECT toStartOfInterval(Timestamp, INTERVAL '%s') as Datetime %s,
+				HostName,
+				MAX(MemoryAverageUsedPercent) AS MaxMemory,
+				MAX(CPUAverageUsedPercent) as MaxCPU,
+				groupArray(CPUAverageUsedPercent) as CPUArray,
+				MAX(CPUFrequency) AS MaxFrequency,
+				MAX(CPUCPI) AS MaxCPICount,
+				MAX(CPUTMAFrontEndBound) AS MaxTMAFrontEndBound,
+				MAX(CPUTMABackendBound) AS MaxTMABackendBound,
+				MAX(CPUTMABadSpec) AS MaxTMABadSpec,
+				MAX(CPUTMARetiring) AS MaxTMARetiring
+			FROM %s
+			WHERE ServiceId = %d AND (Datetime BETWEEN '%s' AND '%s') %s
+			GROUP BY Datetime %s, HostName
+		)
+		GROUP BY Datetime %s ORDER BY Datetime DESC;
 	`, groupBy, percentile, interval, groupBy, config.ClickHouseMetricsTable, params.ServiceId,
 		common.FormatTime(params.StartDateTime), common.FormatTime(params.EndDateTime), conditions, groupBy, groupBy)
+
 	rows, err := c.client.Query(query)
 	if err == nil {
 		defer func(rows *sql.Rows) {
@@ -830,29 +848,63 @@ func (c *ClickHouseClient) FetchMetricsGraph(ctx context.Context, params common.
 		for rows.Next() {
 			var timestamp time.Time
 			var groupedBy string
-			var avgCpu float64
-			var maxCpu float64
-			var avgMemory float64
-			var maxMemory float64
-			var percentileMemory float64
+			var avgCpu, maxCpu float64
+			var avgMemory, maxMemory, percentileMemory float64
 			var groupedByPtr *string
+
+			var avgFrequency, maxFrequency sql.NullFloat64
+			var avgCPICount, maxCPICount sql.NullFloat64
+			var avgTMAFrontEndBound, maxTMAFrontEndBound sql.NullFloat64
+			var avgTMABackendBound, maxTMABackendBound sql.NullFloat64
+			var avgTMABadSpec, maxTMABadSpec sql.NullFloat64
+			var avgTMARetiring, maxTMARetiring sql.NullFloat64
+
 			if params.GroupBy != "none" {
-				err = rows.Scan(&timestamp, &groupedBy, &avgCpu, &maxCpu, &avgMemory, &maxMemory, &percentileMemory)
+				err = rows.Scan(
+					&timestamp, &groupedBy, &avgCpu, &maxCpu, &avgMemory, &maxMemory, &percentileMemory,
+					&avgFrequency, &maxFrequency,
+					&avgCPICount, &maxCPICount,
+					&avgTMAFrontEndBound, &maxTMAFrontEndBound,
+					&avgTMABackendBound, &maxTMABackendBound,
+					&avgTMABadSpec, &maxTMABadSpec,
+					&avgTMARetiring, &maxTMARetiring,
+				)
 				groupedByPtr = &groupedBy
 			} else {
-				err = rows.Scan(&timestamp, &avgCpu, &maxCpu, &avgMemory, &maxMemory, &percentileMemory)
+				err = rows.Scan(
+					&timestamp, &avgCpu, &maxCpu, &avgMemory, &maxMemory, &percentileMemory,
+					&avgFrequency, &maxFrequency,
+					&avgCPICount, &maxCPICount,
+					&avgTMAFrontEndBound, &maxTMAFrontEndBound,
+					&avgTMABackendBound, &maxTMABackendBound,
+					&avgTMABadSpec, &maxTMABadSpec,
+					&avgTMARetiring, &maxTMARetiring,
+				)
 			}
 			if err != nil {
 				log.Printf("error scan result: %v", err)
 			}
+
 			result = append(result, common.MetricsSummary{
-				AvgCpu:           avgCpu,
-				MaxCpu:           maxCpu,
-				AvgMemory:        avgMemory,
-				MaxMemory:        maxMemory,
-				PercentileMemory: percentileMemory,
-				GroupedBy:        groupedByPtr,
-				Time:             &timestamp,
+				AvgCpu:              avgCpu,
+				MaxCpu:              maxCpu,
+				AvgMemory:           avgMemory,
+				MaxMemory:           maxMemory,
+				PercentileMemory:    percentileMemory,
+				AvgFrequency:        getNullableFloat(avgFrequency),
+				MaxFrequency:        getNullableFloat(maxFrequency),
+				AvgCPICount:         getNullableFloat(avgCPICount),
+				MaxCPICount:         getNullableFloat(maxCPICount),
+				AvgTMAFrontEndBound: getNullableFloat(avgTMAFrontEndBound),
+				MaxTMAFrontEndBound: getNullableFloat(maxTMAFrontEndBound),
+				AvgTMABackendBound:  getNullableFloat(avgTMABackendBound),
+				MaxTMABackendBound:  getNullableFloat(maxTMABackendBound),
+				AvgTMABadSpec:       getNullableFloat(avgTMABadSpec),
+				MaxTMABadSpec:       getNullableFloat(maxTMABadSpec),
+				AvgTMARetiring:      getNullableFloat(avgTMARetiring),
+				MaxTMARetiring:      getNullableFloat(maxTMARetiring),
+				GroupedBy:           groupedByPtr,
+				Time:                &timestamp,
 			})
 		}
 		err = rows.Err()
@@ -860,6 +912,13 @@ func (c *ClickHouseClient) FetchMetricsGraph(ctx context.Context, params common.
 		log.Printf("unable to execute query %v\n", err)
 	}
 	return result, err
+}
+
+func getNullableFloat(val sql.NullFloat64) *float64 {
+	if val.Valid {
+		return &val.Float64
+	}
+	return nil
 }
 
 func (c *ClickHouseClient) FetchMetricsCpuTrend(ctx context.Context, params common.MetricsCpuTrendParams,
@@ -870,11 +929,11 @@ func (c *ClickHouseClient) FetchMetricsCpuTrend(ctx context.Context, params comm
 
 	query := fmt.Sprintf(`
 		WITH CURRENT_CONSUMPTION AS (
-			SELECT 
-				arrayAvg(flatten(groupArray(CPUArray))) AS avg_cpu, 
+			SELECT
+				arrayAvg(flatten(groupArray(CPUArray))) AS avg_cpu,
 				MAX(MaxCPU) AS max_cpu,
-				AVG(MaxMemory) AS avg_memory, 
-				MAX(MaxMemory) AS max_memory, 
+				AVG(MaxMemory) AS avg_memory,
+				MAX(MaxMemory) AS max_memory,
 				1 SortOrder
 			FROM
 				(SELECT
@@ -886,11 +945,11 @@ func (c *ClickHouseClient) FetchMetricsCpuTrend(ctx context.Context, params comm
 				GROUP BY HostName)
 		),
 		PREVIOUS_CONSUMPTION AS (
-			SELECT 
-				arrayAvg(flatten(groupArray(CPUArray))) AS avg_cpu, 
+			SELECT
+				arrayAvg(flatten(groupArray(CPUArray))) AS avg_cpu,
 				MAX(MaxCPU) AS max_cpu,
-				AVG(MaxMemory) AS avg_memory, 
-				MAX(MaxMemory) AS max_memory, 
+				AVG(MaxMemory) AS avg_memory,
+				MAX(MaxMemory) AS max_memory,
 				2 SortOrder
 			FROM
 			(SELECT
@@ -901,7 +960,7 @@ func (c *ClickHouseClient) FetchMetricsCpuTrend(ctx context.Context, params comm
 			WHERE ServiceId = %d AND (Timestamp BETWEEN '%s' AND '%s') %s
 			GROUP BY HostName)
 		)
-			SELECT avg_cpu, max_cpu, avg_memory, max_memory 
+			SELECT avg_cpu, max_cpu, avg_memory, max_memory
 			FROM (
 				SELECT * FROM CURRENT_CONSUMPTION
 				UNION ALL

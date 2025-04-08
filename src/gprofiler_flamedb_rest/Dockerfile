@@ -1,4 +1,4 @@
-FROM golang:1.18 as build
+FROM golang:1.21 as build
 
 ENV GO111MODULE on
 
@@ -14,7 +14,7 @@ RUN go install -v ./...
 RUN go build -v -o app
 
 
-FROM debian:10.9-slim
+FROM debian:12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl iputils-ping
 

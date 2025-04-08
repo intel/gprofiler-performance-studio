@@ -37,6 +37,7 @@ export const StyledTab = styled(Tab)(({ theme }) => ({
     color: theme.palette.grey.dark,
     minHeight: '40px !important',
     minWidth: '30px',
+    fontSize: '14px',
     padding: '0 10px',
     '&.Mui-selected': {
         color: COLORS.BLACK,
