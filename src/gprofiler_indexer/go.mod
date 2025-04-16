@@ -25,7 +25,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.13.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
-	golang.org/x/sys v0.13.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
 )
 
 require (
@@ -33,6 +33,6 @@ require (
 	github.com/OneOfOne/xxhash v1.2.2
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/pkg/errors v0.9.1
-	golang.org/x/net v0.17.0 // indirect
+	golang.org/x/net v0.38.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1
 )
