@@ -138,7 +138,7 @@ def _common_fg_rest_response(response: Response, db_api_params: Dict) -> Union[L
 
 def get_query_response(
     fg_params: FGParamsBaseModel, lookup_for: str = "time", resolution=None, interval=None
-) -> Union[List, Dict]:
+) -> Union[List, Dict, str]:
     fg_filter = fg_params.filter.json().encode() if fg_params.filter else None
     db_api_params = get_api_params(
         fg_params.service_name,
@@ -168,7 +168,7 @@ def get_metrics_response(
     resolution=None,
     interval=None,
     compared_start_datetime=None,
-    compared_end_datetime=None
+    compared_end_datetime=None,
 ) -> Union[List, Dict, str]:
     fg_filter = fg_params.filter.json().encode() if fg_params.filter else None
     db_api_params = get_api_params(

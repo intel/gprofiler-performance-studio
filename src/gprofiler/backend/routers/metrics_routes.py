@@ -31,7 +31,8 @@ from backend.models.metrics_models import (
     MetricNodesAndCores,
     MetricNodesCoresSummary,
     MetricSummary,
-    SampleCount, HTMLMetadata,
+    SampleCount,
+    HTMLMetadata,
 )
 from backend.utils.filters_utils import get_rql_first_eq_key, get_rql_only_for_one_key
 from backend.utils.request_utils import flamegraph_base_request_params, get_metrics_response, get_query_response
@@ -225,7 +226,7 @@ def get_html_metadata(
     host_name_value = get_rql_first_eq_key(fg_params.filter, FilterTypes.HOSTNAME_KEY)
     if not host_name_value:
         raise HTTPException(400, detail="Must filter by hostname to get the html metadata")
-    s3_path =  get_metrics_response(fg_params, lookup_for="lasthtml")
+    s3_path = get_metrics_response(fg_params, lookup_for="lasthtml")
     if not s3_path:
         raise HTTPException(404, detail="The html metadata path not found in CH")
     s3_dal = S3ProfileDal(logger)
