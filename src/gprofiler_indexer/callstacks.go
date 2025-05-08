@@ -49,8 +49,14 @@ type FileInfo struct {
 		} `json:"run_arguments"`
 	} `json:"metadata"`
 	Metrics struct {
-		CPUAvg    float64 `json:"cpu_avg"`
-		MemoryAvg float64 `json:"mem_avg"`
+		CPUAvg         float64  `json:"cpu_avg"`
+		MemoryAvg      float64  `json:"mem_avg"`
+		CPUFrequency   *float64 `json:"cpu_freq,omitempty"`
+		CPUCPI         *float64 `json:"cpu_cpi,omitempty"`
+		CPUTMAFEBound  *float64 `json:"cpu_tma_fe_bound,omitempty"`
+		CPUTMABEBound  *float64 `json:"cpu_tma_be_bound,omitempty"`
+		CPUTMABadSpec  *float64 `json:"cpu_tma_bad_spec,omitempty"`
+		CPUTMARetiring *float64 `json:"cpu_tma_retiring,omitempty"`
 	} `json:"metrics"`
 	ApplicationMetadataEnabled bool `json:"application_metadata_enabled"`
 }
@@ -204,7 +210,14 @@ func (pw *ProfilesWriter) writeStacks(weights FrameValuesMap, frames map[string]
 }
 
 func (pw *ProfilesWriter) writeMetrics(serviceId uint32, instanceType string,
-	hostname string, timestamp time.Time, cpuAverageUsedPercent float64, memoryAverageUsedPercent float64) {
+	hostname string, timestamp time.Time, cpuAverageUsedPercent float64, memoryAverageUsedPercent float64,
+	cpuFrequency *float64,
+	cpuCPI *float64,
+	cpuTMAFrontEndBound *float64,
+	cpuTMABackendBound *float64,
+	cpuTMABadSpec *float64,
+	cpuTMARetiring *float64,
+) {
 
 	metricRecord := MetricRecord{
 		Timestamp:                timestamp,
@@ -213,6 +226,12 @@ func (pw *ProfilesWriter) writeMetrics(serviceId uint32, instanceType string,
 		HostName:                 hostname,
 		CPUAverageUsedPercent:    cpuAverageUsedPercent,
 		MemoryAverageUsedPercent: memoryAverageUsedPercent,
+		CPUFrequency:             cpuFrequency,
+		CPUCPI:                   cpuCPI,
+		CPUTMAFrontEndBound:      cpuTMAFrontEndBound,
+		CPUTMABackendBound:       cpuTMABackendBound,
+		CPUTMABadSpec:            cpuTMABadSpec,
+		CPUTMARetiring:           cpuTMARetiring,
 	}
 	pw.metricsRecords <- metricRecord
 }
@@ -267,7 +286,9 @@ func (pw *ProfilesWriter) ParseStackFrameFile(serviceId int, timestamp time.Time
 
 	if fileInfo.Metrics.CPUAvg != 0 && fileInfo.Metrics.MemoryAvg != 0 {
 		pw.writeMetrics(uint32(serviceId), fileInfo.Metadata.CloudInfo.InstanceType,
-			fileInfo.Metadata.Hostname, timestamp, fileInfo.Metrics.CPUAvg, fileInfo.Metrics.MemoryAvg)
+			fileInfo.Metadata.Hostname, timestamp, fileInfo.Metrics.CPUAvg, fileInfo.Metrics.MemoryAvg,
+			fileInfo.Metrics.CPUFrequency, fileInfo.Metrics.CPUCPI, fileInfo.Metrics.CPUTMAFEBound,
+			fileInfo.Metrics.CPUTMABEBound, fileInfo.Metrics.CPUTMABadSpec, fileInfo.Metrics.CPUTMARetiring)
 	}
 
 	return nil
