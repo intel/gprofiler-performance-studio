@@ -82,7 +82,7 @@ The `deploy` directory contains:
 - `docker-compose.yml` - The Docker compose file.
 - `.env` - The environment file where you set your AWS credentials, SQS/S3 names, and AWS region.
 - `https_nginx.conf` - Nginx configuration file used as an entrypoint load balancer.
-- `diagnostics.sh`- A script for testing connectivity between services and printing useful information.
+- `diagnostic.sh`- A script for testing connectivity between services and printing useful information.
 - `tls` - A directory for storing TLS certificates (see [Securing Connections with SSL/TLS](#securing-connections-with-ssltls)).
 - `.htpasswd` - A file for storing basic auth credentials (see above).
 
@@ -162,9 +162,9 @@ docker run --name granulate-gprofiler --restart=always -d --pid=host --userns=ho
 ```
 
 ### Diagnostics
-If a service is restarted or stops, run the diagnostics.sh script to check service connectivity:
+If a service is restarted or stops, run the diagnostic.sh script to check service connectivity:
 ```shell
-./diagnostics.sh
+./diagnostic.sh
 ```
 
 If all OK there, take a look at the logs of the service that is not working properly.
