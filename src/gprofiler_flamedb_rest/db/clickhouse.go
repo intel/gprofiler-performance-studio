@@ -432,7 +432,7 @@ func (c *ClickHouseClient) FetchFieldValueSample(ctx context.Context, field stri
 	selectQuery = `
 		SELECT ?, SUM(NumSamples) as samples from flamedb.samples_1min WHERE ServiceId == '?' AND
 		(Timestamp BETWEEN '?' AND '?') ? GROUP BY ? ORDER BY samples DESC;`
-	rows, err := c.client.Query(query,field, params.ServiceId, common.FormatTime(params.StartDateTime),
+	rows, err := c.client.Query(selectQuery,field, params.ServiceId, common.FormatTime(params.StartDateTime),
 		common.FormatTime(params.EndDateTime), conditions, field)
 	if err == nil {
 		defer rows.Close()
