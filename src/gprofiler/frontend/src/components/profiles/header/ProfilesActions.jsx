@@ -49,7 +49,6 @@ const DownloadLink = ({ serviceName, timeSelection, activeFilters, fileType, dow
             className='download-svg-link'
             style={{ display: 'none' }}
             ref={downloadRef}
-            target='_blank'
             rel='noopener noreferrer'>
             {''}
         </a>
