@@ -15,9 +15,12 @@
 #
 
 import math
+import uuid
 from datetime import datetime, timedelta
 from logging import getLogger
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
+
+from botocore.exceptions import ClientError
 
 from backend.models.filters_models import FilterTypes
 from backend.models.flamegraph_models import FGParamsBaseModel
@@ -30,15 +33,56 @@ from backend.models.metrics_models import (
     MetricNodesCoresSummary,
     MetricSummary,
     SampleCount,
+    HTMLMetadata,
 )
 from backend.utils.filters_utils import get_rql_first_eq_key, get_rql_only_for_one_key
 from backend.utils.request_utils import flamegraph_base_request_params, get_metrics_response, get_query_response
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import Response
+from pydantic import BaseModel
+
+from gprofiler_dev import S3ProfileDal
 from gprofiler_dev.postgres.db_manager import DBManager
 
 logger = getLogger(__name__)
 router = APIRouter()
+
+
+class ProfilingRequest(BaseModel):
+    """Model for profiling request parameters"""
+    service_name: str
+    duration: Optional[int] = 60  # seconds
+    frequency: Optional[int] = 11  # Hz
+    profiling_mode: Optional[str] = "cpu"  # cpu, allocation, none
+    target_hostnames: Optional[List[str]] = None
+    pids: Optional[List[int]] = None
+    additional_args: Optional[Dict[str, Any]] = None
+
+
+class ProfilingResponse(BaseModel):
+    """Response model for profiling requests"""
+    success: bool
+    message: str
+    request_id: Optional[str] = None
+    estimated_completion_time: Optional[datetime] = None
+
+
+class HeartbeatRequest(BaseModel):
+    """Model for host heartbeat request"""
+    ip_address: str
+    hostname: str
+    service_name: str
+    last_command_id: Optional[str] = None
+    status: Optional[str] = "active"  # active, idle, error
+    timestamp: Optional[datetime] = None
+
+
+class HeartbeatResponse(BaseModel):
+    """Response model for heartbeat requests"""
+    success: bool
+    message: str
+    profiling_request: Optional[ProfilingRequest] = None
+    command_id: Optional[str] = None
 
 
 def get_time_interval_value(start_time: datetime, end_time: datetime, interval: str) -> str:
@@ -212,3 +256,177 @@ def calculate_trend_in_cpu(
     )
 
     return response
+
+
+@router.get("/html_metadata", response_model=HTMLMetadata)
+def get_html_metadata(
+    fg_params: FGParamsBaseModel = Depends(flamegraph_base_request_params),
+):
+    host_name_value = get_rql_first_eq_key(fg_params.filter, FilterTypes.HOSTNAME_KEY)
+    if not host_name_value:
+        raise HTTPException(400, detail="Must filter by hostname to get the html metadata")
+    s3_path = get_metrics_response(fg_params, lookup_for="lasthtml")
+    if not s3_path:
+        raise HTTPException(404, detail="The html metadata path not found in CH")
+    s3_dal = S3ProfileDal(logger)
+    try:
+        html_content = s3_dal.get_object(s3_path, is_gzip=True)
+    except ClientError:
+        raise HTTPException(status_code=404, detail="The html metadata file not found in S3")
+    return HTMLMetadata(content=html_content)
+
+
+@router.post("/profile_request", response_model=ProfilingResponse)
+def create_profiling_request(profiling_request: ProfilingRequest):
+    """
+    Create a new profiling request with the specified parameters.
+    
+    This endpoint accepts profiling arguments in JSON format and initiates
+    a profiling session based on the provided configuration.
+    """
+    try:
+        # Validate the profiling mode
+        valid_modes = ["cpu", "allocation", "none"]
+        if profiling_request.profiling_mode not in valid_modes:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid profiling mode. Must be one of: {valid_modes}"
+            )
+        
+        # Validate duration (must be positive)
+        if profiling_request.duration and profiling_request.duration <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Duration must be a positive integer (seconds)"
+            )
+        
+        # Validate frequency (must be positive)
+        if profiling_request.frequency and profiling_request.frequency <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Frequency must be a positive integer (Hz)"
+            )
+        
+        # Log the profiling request
+        logger.info(
+            f"Received profiling request for service: {profiling_request.service_name}",
+            extra={
+                "service_name": profiling_request.service_name,
+                "duration": profiling_request.duration,
+                "frequency": profiling_request.frequency,
+                "mode": profiling_request.profiling_mode,
+                "target_hostnames": profiling_request.target_hostnames,
+                "pids": profiling_request.pids
+            }
+        )
+        
+        # TODO: Implement actual profiling logic here
+        # This is where you would:
+        # 1. Save the profiling request arguments to PostgreSQL DB for tracking and audit purposes
+        # 2. Queue the profiling request
+        # 3. Initiate profiling on target hosts/processes
+        # 4. Return a request ID for tracking
+        
+        # Generate a mock request ID for now
+        import uuid
+        request_id = str(uuid.uuid4())
+        
+        # Calculate estimated completion time
+        completion_time = datetime.now() + timedelta(seconds=profiling_request.duration or 60)
+        
+        return ProfilingResponse(
+            success=True,
+            message=f"Profiling request submitted successfully for service '{profiling_request.service_name}'",
+            request_id=request_id,
+            estimated_completion_time=completion_time
+        )
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create profiling request: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error while processing profiling request"
+        )
+
+
+@router.post("/heartbeat", response_model=HeartbeatResponse)
+def receive_heartbeat(heartbeat: HeartbeatRequest):
+    """
+    Receive heartbeat from host and check for pending profiling requests.
+    
+    This endpoint:
+    1. Receives heartbeat information from hosts (IP, hostname, service, last command)
+    2. Updates host status in PostgreSQL DB
+    3. Checks for pending profiling requests for this host/service
+    4. Returns new profiling request if available and not already executed
+    """
+    try:
+        # Set timestamp if not provided
+        if heartbeat.timestamp is None:
+            heartbeat.timestamp = datetime.now()
+        
+        # Log the heartbeat
+        logger.info(
+            f"Received heartbeat from host: {heartbeat.hostname} ({heartbeat.ip_address})",
+            extra={
+                "hostname": heartbeat.hostname,
+                "ip_address": heartbeat.ip_address,
+                "service_name": heartbeat.service_name,
+                "last_command_id": heartbeat.last_command_id,
+                "status": heartbeat.status,
+                "timestamp": heartbeat.timestamp
+            }
+        )
+        
+        # TODO: Implement actual heartbeat and profiling request logic here
+        # This is where you would:
+        # 1. Update host heartbeat information in PostgreSQL DB (hosts table)
+        # 2. Check for pending profiling requests for this host/service in PostgreSQL DB
+        # 3. Filter requests that haven't been executed yet (not in last_command_id)
+        # 4. Mark the profiling request as assigned/in-progress
+        # 5. Return the profiling request details to the host
+        
+        db_manager = DBManager()
+        
+        # Mock logic for now - check if there's a pending profiling request
+        # In real implementation, this would query the profiling_requests table
+        pending_request = None
+        command_id = None
+        
+        # Example query logic (to be implemented):
+        # pending_request = db_manager.get_pending_profiling_request(
+        #     hostname=heartbeat.hostname,
+        #     service_name=heartbeat.service_name,
+        #     exclude_command_id=heartbeat.last_command_id
+        # )
+        
+        if pending_request:
+            # Generate command ID for this profiling request
+            command_id = str(uuid.uuid4())
+            
+            # Mark request as assigned (to be implemented)
+            # db_manager.mark_profiling_request_assigned(pending_request.id, command_id, heartbeat.hostname)
+            
+            return HeartbeatResponse(
+                success=True,
+                message="Heartbeat received. New profiling request available.",
+                profiling_request=pending_request,
+                command_id=command_id
+            )
+        else:
+            return HeartbeatResponse(
+                success=True,
+                message="Heartbeat received. No pending profiling requests.",
+                profiling_request=None,
+                command_id=None
+            )
+        
+    except Exception as e:
+        logger.error(f"Failed to process heartbeat: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error while processing heartbeat"
+        )

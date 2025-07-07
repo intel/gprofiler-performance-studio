@@ -585,3 +585,207 @@ class DBManager(metaclass=Singleton):
         return self.db.execute(
             AggregationSQLQueries.SERVICES_SUMMARY, values, one_value=False, return_dict=True, fetch_all=True
         )
+
+    # Profiling Request Management Methods
+
+    def create_profiling_request(
+        self,
+        service_name: str,
+        duration: int = 60,
+        frequency: int = 11,
+        profiling_mode: str = "cpu",
+        target_hostnames: Optional[List[str]] = None,
+        pids: Optional[List[int]] = None,
+        additional_args: Optional[Dict] = None,
+        estimated_completion_time: Optional[datetime] = None
+    ) -> str:
+        """Create a new profiling request and return the request ID"""
+        query = """
+        INSERT INTO ProfilingRequests (
+            service_name, duration, frequency, profiling_mode,
+            target_hostnames, pids, additional_args, estimated_completion_time, service_id
+        ) VALUES (
+            %(service_name)s, %(duration)s, %(frequency)s, %(profiling_mode)s::ProfilingMode,
+            %(target_hostnames)s, %(pids)s, %(additional_args)s, %(estimated_completion_time)s,
+            (SELECT ID FROM Services WHERE name = %(service_name)s LIMIT 1)
+        ) RETURNING request_id
+        """
+
+        values = {
+            "service_name": service_name,
+            "duration": duration,
+            "frequency": frequency,
+            "profiling_mode": profiling_mode,
+            "target_hostnames": target_hostnames,
+            "pids": pids,
+            "additional_args": json.dumps(additional_args) if additional_args else None,
+            "estimated_completion_time": estimated_completion_time
+        }
+
+        result = self.db.execute(query, values, one_value=True, return_dict=True)
+        return str(result["request_id"])
+
+    def get_pending_profiling_request(
+        self,
+        hostname: str,
+        service_name: str,
+        exclude_command_id: Optional[str] = None
+    ) -> Optional[Dict]:
+        """Get pending profiling request for a specific host/service"""
+        query = """
+        SELECT * FROM get_pending_profiling_request(
+            %(hostname)s, %(service_name)s, %(exclude_command_id)s
+        )
+        """
+
+        values = {
+            "hostname": hostname,
+            "service_name": service_name,
+            "exclude_command_id": exclude_command_id
+        }
+
+        result = self.db.execute(query, values, one_value=True, return_dict=True)
+        return result if result else None
+
+    def mark_profiling_request_assigned(
+        self,
+        request_id: str,
+        command_id: str,
+        hostname: str
+    ) -> bool:
+        """Mark a profiling request as assigned to a host"""
+        query = """
+        SELECT mark_profiling_request_assigned(
+            %(request_id)s::uuid, %(command_id)s::uuid, %(hostname)s
+        ) as success
+        """
+
+        values = {
+            "request_id": request_id,
+            "command_id": command_id,
+            "hostname": hostname
+        }
+
+        result = self.db.execute(query, values, one_value=True, return_dict=True)
+        return result["success"] if result else False
+
+    def update_profiling_request_status(
+        self,
+        request_id: str,
+        status: str,
+        completed_at: Optional[datetime] = None,
+        error_message: Optional[str] = None
+    ) -> bool:
+        """Update the status of a profiling request"""
+        query = """
+        UPDATE ProfilingRequests
+        SET status = %(status)s::ProfilingRequestStatus,
+            completed_at = %(completed_at)s
+        WHERE request_id = %(request_id)s::uuid
+        """
+
+        values = {
+            "request_id": request_id,
+            "status": status,
+            "completed_at": completed_at
+        }
+
+        rows_affected = self.db.execute(query, values, has_value=False)
+
+        # Also update execution record if exists
+        if rows_affected > 0:
+            exec_query = """
+            UPDATE ProfilingExecutions
+            SET status = %(status)s::ProfilingRequestStatus,
+                completed_at = %(completed_at)s,
+                error_message = %(error_message)s
+            WHERE profiling_request_id = (
+                SELECT ID FROM ProfilingRequests WHERE request_id = %(request_id)s::uuid
+            )
+            """
+            exec_values = {
+                "request_id": request_id,
+                "status": status,
+                "completed_at": completed_at,
+                "error_message": error_message
+            }
+            self.db.execute(exec_query, exec_values, has_value=False)
+
+        return rows_affected > 0
+
+    def upsert_host_heartbeat(
+        self,
+        hostname: str,
+        ip_address: str,
+        service_name: str,
+        last_command_id: Optional[str] = None,
+        status: str = "active"
+    ) -> None:
+        """Update or insert host heartbeat information"""
+        query = """
+        SELECT upsert_host_heartbeat(
+            %(hostname)s, %(ip_address)s::inet, %(service_name)s,
+            %(last_command_id)s::uuid, %(status)s
+        )
+        """
+
+        values = {
+            "hostname": hostname,
+            "ip_address": ip_address,
+            "service_name": service_name,
+            "last_command_id": last_command_id,
+            "status": status
+        }
+
+        self.db.execute(query, values, has_value=False)
+
+    def get_host_heartbeat(self, hostname: str) -> Optional[Dict]:
+        """Get the latest heartbeat information for a host"""
+        query = """
+        SELECT
+            hostname, ip_address, service_name, last_command_id,
+            status, heartbeat_timestamp, created_at, updated_at
+        FROM HostHeartbeats
+        WHERE hostname = %(hostname)s
+        """
+
+        values = {"hostname": hostname}
+        result = self.db.execute(query, values, one_value=True, return_dict=True)
+        return result if result else None
+
+    def get_active_hosts(self, service_name: Optional[str] = None) -> List[Dict]:
+        """Get list of active hosts, optionally filtered by service"""
+        query = """
+        SELECT
+            hostname, ip_address, service_name, last_command_id,
+            status, heartbeat_timestamp
+        FROM HostHeartbeats
+        WHERE status = 'active'
+          AND heartbeat_timestamp > NOW() - INTERVAL '10 minutes'
+        """
+
+        values = {}
+        if service_name:
+            query += " AND service_name = %(service_name)s"
+            values["service_name"] = service_name
+
+        query += " ORDER BY heartbeat_timestamp DESC"
+
+        return self.db.execute(query, values, one_value=False, return_dict=True, fetch_all=True)
+
+    def get_profiling_request_status(self, request_id: str) -> Optional[Dict]:
+        """Get the current status of a profiling request"""
+        query = """
+        SELECT
+            pr.request_id, pr.service_name, pr.status, pr.assigned_to_hostname,
+            pr.created_at, pr.assigned_at, pr.completed_at, pr.estimated_completion_time,
+            pe.command_id, pe.hostname as execution_hostname, pe.started_at,
+            pe.completed_at as execution_completed_at, pe.error_message
+        FROM ProfilingRequests pr
+        LEFT JOIN ProfilingExecutions pe ON pr.ID = pe.profiling_request_id
+        WHERE pr.request_id = %(request_id)s::uuid
+        """
+
+        values = {"request_id": request_id}
+        result = self.db.execute(query, values, one_value=True, return_dict=True)
+        return result if result else None

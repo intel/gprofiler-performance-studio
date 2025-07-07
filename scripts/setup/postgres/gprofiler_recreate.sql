@@ -671,3 +671,48 @@ create aggregate zz_hashagg(text) (
     sfunc = zz_concat,
     stype = text,
     initcond = '');
+
+
+-- Profiling and Heartbeat Tables (added for profiling request management)
+
+-- Create enum for profiling modes
+CREATE TYPE ProfilingMode AS ENUM ('cpu', 'allocation', 'none');
+
+-- Create enum for profiling request status
+CREATE TYPE ProfilingRequestStatus AS ENUM ('pending', 'assigned', 'in_progress', 'completed', 'failed', 'cancelled');
+
+-- Create enum for host status
+CREATE TYPE HostStatus AS ENUM ('active', 'idle', 'error', 'offline');
+
+-- Table for storing profiling requests
+CREATE TABLE ProfilingRequests (
+    ID bigserial PRIMARY KEY,
+    request_id uuid UNIQUE NOT NULL DEFAULT gen_random_uuid(),
+    service_name text NOT NULL,
+    duration integer DEFAULT 60 CHECK (duration > 0),
+    frequency integer DEFAULT 11 CHECK (frequency > 0),
+    profiling_mode ProfilingMode DEFAULT 'cpu',
+    target_hostnames text[], -- Array of target hostnames
+    pids integer[], -- Array of target PIDs
+    additional_args jsonb, -- Store additional arguments as JSON
+    status ProfilingRequestStatus DEFAULT 'pending',
+    assigned_to_hostname text, -- Which host is executing this request
+    assigned_command_id uuid, -- Command ID for tracking execution
+    created_at timestamp DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp DEFAULT CURRENT_TIMESTAMP,
+    assigned_at timestamp,
+    completed_at timestamp,
+    estimated_completion_time timestamp,
+
+    -- Foreign key to services table
+    service_id bigint CONSTRAINT "profiling_request_service_fk" REFERENCES Services(ID) ON DELETE CASCADE
+);
+
+
+
+-- Indexes for better query performance
+CREATE INDEX idx_profiling_requests_service_name ON ProfilingRequests(service_name);
+CREATE INDEX idx_profiling_requests_status ON ProfilingRequests(status);
+CREATE INDEX idx_profiling_requests_target_hostnames ON ProfilingRequests USING GIN(target_hostnames);
+CREATE INDEX idx_profiling_requests_created_at ON ProfilingRequests(created_at);
+CREATE INDEX idx_profiling_requests_assigned_hostname ON ProfilingRequests(assigned_to_hostname);

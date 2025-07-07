@@ -1,0 +1,181 @@
+diff a/src/gprofiler/backend/routers/metrics_routes.py b/src/gprofiler/backend/routers/metrics_routes.py	(rejected hunks)
+@@ -15,9 +15,10 @@
+ #
+ 
+ import math
++import uuid
+ from datetime import datetime, timedelta
+ from logging import getLogger
+-from typing import List, Optional
++from typing import List, Optional, Dict, Any
+ 
+ from botocore.exceptions import ClientError
+ 
+@@ -38,6 +39,7 @@ from backend.utils.filters_utils import get_rql_first_eq_key, get_rql_only_for_o
+ from backend.utils.request_utils import flamegraph_base_request_params, get_metrics_response, get_query_response
+ from fastapi import APIRouter, Depends, Query, HTTPException
+ from fastapi.responses import Response
++from pydantic import BaseModel
+ 
+ from gprofiler_dev import S3ProfileDal
+ from gprofiler_dev.postgres.db_manager import DBManager
+@@ -235,3 +274,159 @@ def get_html_metadata(
+     except ClientError:
+         raise HTTPException(status_code=404, detail="The html metadata file not found in S3")
+     return HTMLMetadata(content=html_content)
++
++
++@router.post("/profile_request", response_model=ProfilingResponse)
++def create_profiling_request(profiling_request: ProfilingRequest):
++    """
++    Create a new profiling request with the specified parameters.
++    
++    This endpoint accepts profiling arguments in JSON format and initiates
++    a profiling session based on the provided configuration.
++    """
++    try:
++        # Validate the profiling mode
++        valid_modes = ["cpu", "allocation", "none"]
++        if profiling_request.profiling_mode not in valid_modes:
++            raise HTTPException(
++                status_code=400, 
++                detail=f"Invalid profiling mode. Must be one of: {valid_modes}"
++            )
++        
++        # Validate duration (must be positive)
++        if profiling_request.duration and profiling_request.duration <= 0:
++            raise HTTPException(
++                status_code=400,
++                detail="Duration must be a positive integer (seconds)"
++            )
++        
++        # Validate frequency (must be positive)
++        if profiling_request.frequency and profiling_request.frequency <= 0:
++            raise HTTPException(
++                status_code=400,
++                detail="Frequency must be a positive integer (Hz)"
++            )
++        
++        # Log the profiling request
++        logger.info(
++            f"Received profiling request for service: {profiling_request.service_name}",
++            extra={
++                "service_name": profiling_request.service_name,
++                "duration": profiling_request.duration,
++                "frequency": profiling_request.frequency,
++                "mode": profiling_request.profiling_mode,
++                "target_hostnames": profiling_request.target_hostnames,
++                "pids": profiling_request.pids
++            }
++        )
++        
++        # TODO: Implement actual profiling logic here
++        # This is where you would:
++        # 1. Save the profiling request arguments to PostgreSQL DB for tracking and audit purposes
++        # 2. Queue the profiling request
++        # 3. Initiate profiling on target hosts/processes
++        # 4. Return a request ID for tracking
++        
++        # Generate a mock request ID for now
++        import uuid
++        request_id = str(uuid.uuid4())
++        
++        # Calculate estimated completion time
++        completion_time = datetime.now() + timedelta(seconds=profiling_request.duration or 60)
++        
++        return ProfilingResponse(
++            success=True,
++            message=f"Profiling request submitted successfully for service '{profiling_request.service_name}'",
++            request_id=request_id,
++            estimated_completion_time=completion_time
++        )
++        
++    except HTTPException:
++        # Re-raise HTTP exceptions as-is
++        raise
++    except Exception as e:
++        logger.error(f"Failed to create profiling request: {str(e)}", exc_info=True)
++        raise HTTPException(
++            status_code=500,
++            detail="Internal server error while processing profiling request"
++        )
++
++
++@router.post("/heartbeat", response_model=HeartbeatResponse)
++def receive_heartbeat(heartbeat: HeartbeatRequest):
++    """
++    Receive heartbeat from host and check for pending profiling requests.
++    
++    This endpoint:
++    1. Receives heartbeat information from hosts (IP, hostname, service, last command)
++    2. Updates host status in PostgreSQL DB
++    3. Checks for pending profiling requests for this host/service
++    4. Returns new profiling request if available and not already executed
++    """
++    try:
++        # Set timestamp if not provided
++        if heartbeat.timestamp is None:
++            heartbeat.timestamp = datetime.now()
++        
++        # Log the heartbeat
++        logger.info(
++            f"Received heartbeat from host: {heartbeat.hostname} ({heartbeat.ip_address})",
++            extra={
++                "hostname": heartbeat.hostname,
++                "ip_address": heartbeat.ip_address,
++                "service_name": heartbeat.service_name,
++                "last_command_id": heartbeat.last_command_id,
++                "status": heartbeat.status,
++                "timestamp": heartbeat.timestamp
++            }
++        )
++        
++        # TODO: Implement actual heartbeat and profiling request logic here
++        # This is where you would:
++        # 1. Update host heartbeat information in PostgreSQL DB (hosts table)
++        # 2. Check for pending profiling requests for this host/service in PostgreSQL DB
++        # 3. Filter requests that haven't been executed yet (not in last_command_id)
++        # 4. Mark the profiling request as assigned/in-progress
++        # 5. Return the profiling request details to the host
++        
++        db_manager = DBManager()
++        
++        # Mock logic for now - check if there's a pending profiling request
++        # In real implementation, this would query the profiling_requests table
++        pending_request = None
++        command_id = None
++        
++        # Example query logic (to be implemented):
++        # pending_request = db_manager.get_pending_profiling_request(
++        #     hostname=heartbeat.hostname,
++        #     service_name=heartbeat.service_name,
++        #     exclude_command_id=heartbeat.last_command_id
++        # )
++        
++        if pending_request:
++            # Generate command ID for this profiling request
++            command_id = str(uuid.uuid4())
++            
++            # Mark request as assigned (to be implemented)
++            # db_manager.mark_profiling_request_assigned(pending_request.id, command_id, heartbeat.hostname)
++            
++            return HeartbeatResponse(
++                success=True,
++                message="Heartbeat received. New profiling request available.",
++                profiling_request=pending_request,
++                command_id=command_id
++            )
++        else:
++            return HeartbeatResponse(
++                success=True,
++                message="Heartbeat received. No pending profiling requests.",
++                profiling_request=None,
++                command_id=None
++            )
++        
++    except Exception as e:
++        logger.error(f"Failed to process heartbeat: {str(e)}", exc_info=True)
++        raise HTTPException(
++            status_code=500,
++            detail="Internal server error while processing heartbeat"
++        )
