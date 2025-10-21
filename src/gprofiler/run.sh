@@ -48,6 +48,7 @@ gunicorn_cmd_line=" --workers=${GUNICORN_PROCESS_COUNT} \
                --max-requests-jitter=1000 \
                --timeout=300 \
                --preload \
+               --forwarded-allow-ips='*' \
                --log-level=${GUNICORN_LOG_LEVEL} \
                --pid=${gunicorn_pid_file}"
 
