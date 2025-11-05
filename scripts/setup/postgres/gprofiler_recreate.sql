@@ -243,6 +243,117 @@ CREATE TABLE MinesweeperFrames (
 );
 
 
+-- Additional Types for Profiling System
+CREATE TYPE ProfilingMode AS ENUM ('cpu', 'allocation', 'none');
+CREATE TYPE ProfilingRequestStatus AS ENUM ('pending', 'assigned', 'completed', 'failed', 'cancelled');
+CREATE TYPE CommandStatus AS ENUM ('pending', 'sent', 'completed', 'failed');
+CREATE TYPE HostStatus AS ENUM ('active', 'idle', 'error', 'offline');
+
+-- Host Heartbeat Table (simplified)
+CREATE TABLE HostHeartbeats (
+    ID bigserial PRIMARY KEY,
+    hostname text NOT NULL,
+    ip_address inet NOT NULL,
+    service_name text NOT NULL,
+    last_command_id uuid NULL,
+    status HostStatus NOT NULL DEFAULT 'active',
+    heartbeat_timestamp timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "unique_host_heartbeat" UNIQUE (hostname, service_name)
+);
+
+-- Essential indexes for heartbeats
+CREATE INDEX idx_hostheartbeats_hostname ON HostHeartbeats (hostname);
+CREATE INDEX idx_hostheartbeats_service_name ON HostHeartbeats (service_name);
+CREATE INDEX idx_hostheartbeats_status ON HostHeartbeats (status);
+CREATE INDEX idx_hostheartbeats_heartbeat_timestamp ON HostHeartbeats (heartbeat_timestamp);
+
+-- Profiling Requests Table (simplified)
+CREATE TABLE ProfilingRequests (
+    ID bigserial PRIMARY KEY,
+    request_id uuid NOT NULL UNIQUE,
+    service_name text NOT NULL,
+    request_type text NOT NULL CHECK (request_type IN ('start', 'stop')),
+    continuous boolean NOT NULL DEFAULT false,
+    duration integer NULL DEFAULT 60,
+    frequency integer NULL DEFAULT 11,
+    profiling_mode ProfilingMode NOT NULL DEFAULT 'cpu',
+    target_hostnames text[] NOT NULL,
+    pids integer[] NULL,
+    stop_level text NULL DEFAULT 'process' CHECK (stop_level IN ('process', 'host')),
+    additional_args jsonb NULL,
+    status ProfilingRequestStatus NOT NULL DEFAULT 'pending',
+    assigned_to_hostname text NULL,
+    assigned_at timestamp NULL,
+    completed_at timestamp NULL,
+    estimated_completion_time timestamp NULL,
+    service_id bigint NULL CONSTRAINT "fk_profiling_request_service" REFERENCES Services(ID),
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Essential indexes for profiling requests
+CREATE INDEX idx_profilingrequests_request_id ON ProfilingRequests (request_id);
+CREATE INDEX idx_profilingrequests_service_name ON ProfilingRequests (service_name);
+CREATE INDEX idx_profilingrequests_status ON ProfilingRequests (status);
+CREATE INDEX idx_profilingrequests_request_type ON ProfilingRequests (request_type);
+CREATE INDEX idx_profilingrequests_created_at ON ProfilingRequests (created_at);
+
+-- Profiling Commands Table (simplified)
+CREATE TABLE ProfilingCommands (
+    ID bigserial PRIMARY KEY,
+    command_id uuid NOT NULL,
+    hostname text NOT NULL,
+    service_name text NOT NULL,
+    command_type text NOT NULL CHECK (command_type IN ('start', 'stop')),
+    request_ids uuid[] NOT NULL,
+    combined_config jsonb NULL,
+    status CommandStatus NOT NULL DEFAULT 'pending',
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    sent_at timestamp NULL,
+    completed_at timestamp NULL,
+    execution_time integer NULL,
+    error_message text NULL,
+    results_path text NULL,
+    updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "unique_profiling_command_per_host" UNIQUE (hostname, service_name)
+);
+
+-- Essential indexes for profiling commands
+CREATE INDEX idx_profilingcommands_command_id ON ProfilingCommands (command_id);
+CREATE INDEX idx_profilingcommands_hostname ON ProfilingCommands (hostname);
+CREATE INDEX idx_profilingcommands_service_name ON ProfilingCommands (service_name);
+CREATE INDEX idx_profilingcommands_status ON ProfilingCommands (status);
+CREATE INDEX idx_profilingcommands_hostname_service ON ProfilingCommands (hostname, service_name);
+
+-- Profiling Executions Table (optional - for audit trail)
+CREATE TABLE ProfilingExecutions (
+    ID bigserial PRIMARY KEY,
+    command_id uuid NOT NULL,
+    hostname text NOT NULL,
+    profiling_request_id uuid NOT NULL CONSTRAINT "fk_profiling_execution_request" REFERENCES ProfilingRequests(request_id),
+    status ProfilingRequestStatus NOT NULL DEFAULT 'pending',
+    started_at timestamp NULL,
+    completed_at timestamp NULL,
+    execution_time integer NULL,
+    error_message text NULL,
+    results_path text NULL,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Adding the constraint that db_manager.py expects for ON CONFLICT
+    CONSTRAINT "unique_profiling_execution" UNIQUE (command_id, hostname)
+);
+
+-- Essential indexes for profiling executions
+CREATE INDEX idx_profilingexecutions_command_id ON ProfilingExecutions (command_id);
+CREATE INDEX idx_profilingexecutions_hostname ON ProfilingExecutions (hostname);
+CREATE INDEX idx_profilingexecutions_profiling_request_id ON ProfilingExecutions (profiling_request_id);
+CREATE INDEX idx_profilingexecutions_status ON ProfilingExecutions (status);
+
+-- FUNCTIONS
+
 CREATE OR REPLACE FUNCTION calc_profiler_usage_history(start_date timestamp without time zone, end_date timestamp without time zone, interval_s bigint, max_iterations bigint DEFAULT 3)
  RETURNS TABLE(start_time timestamp without time zone, end_time timestamp without time zone, service bigint, running_hours double precision, core_hours double precision, lowest_agent_version bigint)
  LANGUAGE plpgsql
@@ -671,3 +782,4 @@ create aggregate zz_hashagg(text) (
     sfunc = zz_concat,
     stype = text,
     initcond = '');
+
