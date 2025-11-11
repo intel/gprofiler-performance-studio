@@ -291,7 +291,7 @@ func (h Handlers) GetMetricsCpuTrends(c *gin.Context) {
 }
 
 func (h Handlers) GetLastHTML(c *gin.Context) {
-	params, query, err := parseParams(common.MetricsLastHTMLParams{}, nil, c)
+	params, query, err := parseParams(common.MetricsLastHTMLParams{}, MetricsQueryParser, c)
 	if err != nil {
 		return
 	}
