@@ -1,0 +1,257 @@
+#
+# Copyright (C) 2023 Intel Corporation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+services:
+  # ---
+  db_clickhouse:
+    image: clickhouse/clickhouse-server:22.8
+    profiles: ["with-clickhouse", "with-all"]
+    container_name: gprofiler-ps-clickhouse
+    restart: always
+    # Uncomment the following lines to expose ClickHouse ports
+    # ports:
+    #  - "8123:8123"
+    #  - "9000:9000"
+    #  - "9009:9009"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    environment:
+     - CLICKHOUSE_USER=$CLICKHOUSE_USER
+     - CLICKHOUSE_PASSWORD=$CLICKHOUSE_PASSWORD
+    volumes:
+     - ../src/gprofiler_indexer/sql/create_ch_schema.sql:/docker-entrypoint-initdb.d/create_schema.sql
+     - logs:/var/log/clickhouse-server/
+     - db_clickhouse:/var/lib/clickhouse/
+
+  # ---
+  db_postgres:
+    image: postgres:15.1
+    profiles: ["with-postgres", "with-all"]
+    container_name: gprofiler-ps-postgres
+    restart: always
+    # Uncomment the following lines to expose Postgres ports
+    # ports:
+    #   - "5432:5432"
+    environment:
+      - POSTGRES_USER=$POSTGRES_USER
+      - POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+      - POSTGRES_DB=$POSTGRES_DB
+    volumes:
+      - db_postgres:/var/lib/postgresql/data
+      - ../scripts/setup/postgres/gprofiler_recreate.sql:/docker-entrypoint-initdb.d/create_scheme.sql
+
+  # ---
+  webapp:
+    build:
+      context: ../src
+      dockerfile: gprofiler/Dockerfile
+    profiles: ["with-webapp", "with-all"]
+    container_name: gprofiler-ps-webapp
+    restart: always
+    # Uncomment the following lines to expose webapp ports
+    # ports:
+    #   - "80:80"
+    environment:
+      - BUCKET_NAME=$BUCKET_NAME
+      - QUERY_API_BASE_URL=https://ch-rest-service:4433
+      - REST_VERIFY_TLS=FALSE
+      - REST_USERNAME=$REST_USERNAME
+      - REST_PASSWORD=$REST_PASSWORD
+      - SQS_INDEXER_QUEUE_URL=$SQS_INDEXER_QUEUE_URL
+      - GPROFILER_POSTGRES_DB_NAME=$POSTGRES_DB
+      - GPROFILER_POSTGRES_PORT=$POSTGRES_PORT
+      - GPROFILER_POSTGRES_HOST=$POSTGRES_HOST
+      - GPROFILER_POSTGRES_USERNAME=$POSTGRES_USER
+      - GPROFILER_POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+      - APP_LOG_FILE_PATH=$WEBAPP_APP_LOG_FILE_PATH
+      - APP_LOG_LEVEL=INFO
+      - AWS_METADATA_SERVICE_NUM_ATTEMPTS=100
+      - REDIRECT_DOMAIN=$DOMAIN
+      - SQS_ENDPOINT_URL=https://sqs.${AWS_REGION}.amazonaws.com
+      - AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+      - AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN
+      - AWS_DEFAULT_REGION=$AWS_REGION
+
+  # ---
+  ch-rest-service:
+    build:
+      context: ../src/gprofiler_flamedb_rest
+      dockerfile: Dockerfile
+    profiles: ["with-ch-rest-service", "with-all"]
+    container_name: gprofiler-ps-ch-rest-service
+    restart: always
+    # Uncomment the following lines to expose ClickHouse REST service ports
+    # ports:
+    #   - "8080:8080"
+    environment:
+      - CLICKHOUSE_ADDR=${CLICKHOUSE_HOST}:9000?username=${CLICKHOUSE_USER}&password=${CLICKHOUSE_PASSWORD}
+      - CLICKHOUSE_STACKS_TABLE=flamedb.samples
+      - CLICKHOUSE_METRICS_TABLE=flamedb.metrics
+      - AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+      - AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN
+      - CERT_FILE_PATH=/tls/ch_rest_cert.pem
+      - KEY_FILE_PATH=/tls/ch_rest_key.pem
+      - BASIC_AUTH_CREDENTIALS=${REST_USERNAME}:${REST_PASSWORD}
+    volumes:
+      - "../deploy/tls:/tls"
+    healthcheck:
+      test: echo 'SELECT database,name from system.tables' | curl -s 'http://$CLICKHOUSE_USER:$CLICKHOUSE_PASSWORD@$CLICKHOUSE_HOST:8123/?query=' --data-binary @- | grep -q "samples"
+      interval: 10s
+      retries: 10
+      start_period: 20s
+
+
+  # ---
+  agents-logs-backend:
+    user: "888:888"
+    build:
+      context: ../src
+      dockerfile: gprofiler_logging/Dockerfile
+    profiles: ["with-agents-logs-backend", "with-all"]
+    container_name: gprofiler-ps-agents-logs-backend
+    restart: always
+    # Uncomment the following lines to expose agents logs backend ports
+    # ports:
+    #   - "80:80"
+    environment:
+      - APP_LOG_FILE_PATH=$AGENTS_LOGS_APP_LOG_FILE_PATH
+      - ENV=open
+      - LOG_FILE_PATH=$AGENTS_LOGS_LOG_FILE_PATH
+      - GPROFILER_POSTGRES_DB_NAME=$POSTGRES_DB
+      - GPROFILER_POSTGRES_PORT=$POSTGRES_PORT
+      - GPROFILER_POSTGRES_HOST=$POSTGRES_HOST
+      - GPROFILER_POSTGRES_USERNAME=$POSTGRES_USER
+      - GPROFILER_POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+    volumes:
+      - "logs:${COMMON_LOGS_DIR}"
+
+  # ---
+  periodic-tasks:
+    user: "888:888"
+    build:
+      context: ../deploy/periodic_tasks
+      dockerfile: Dockerfile
+    profiles: ["with-periodic-tasks", "with-all"]
+    container_name: gprofiler-ps-periodic-tasks
+    restart: always
+    environment:
+      - PGHOST=$POSTGRES_HOST
+      - PGPORT=$POSTGRES_PORT
+      - PGUSER=$POSTGRES_USER
+      - PGPASSWORD=$POSTGRES_PASSWORD
+      - PGDATABASE=$POSTGRES_DB
+      - LOGROTATE_PATTERN=${COMMON_LOGS_DIR}/*.log
+      - LOGROTATE_SIZE=15M
+    volumes:
+      - "logs:${COMMON_LOGS_DIR}"
+
+  # ---
+  ch-indexer:
+    build:
+      context: ../src/gprofiler_indexer
+      dockerfile: Dockerfile
+    profiles: ["with-ch-indexer", "with-all"]
+    container_name: gprofiler-ps-ch-indexer
+    restart: always
+    environment:
+      - SQS_QUEUE_URL=$SQS_INDEXER_QUEUE_URL
+      - AWS_REGION=$AWS_REGION
+      - S3_BUCKET=$BUCKET_NAME
+      - CLICKHOUSE_ADDR=$CLICKHOUSE_HOST:9000
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_USE_TLS=false
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - CONCURRENCY=8
+      - CLICKHOUSE_STACKS_TABLE=flamedb.samples
+      - CLICKHOUSE_METRICS_TABLE=flamedb.metrics
+      - CLICKHOUSE_STACKS_BATCH_SIZE=100000
+      - CLICKHOUSE_METRICS_BATCH_SIZE=1000
+      - CACHE_SIZE=2048
+      - AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+      - AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN
+
+  #---
+  nginx-load-balancer:
+    image: nginx:1.23.3
+    profiles: ["with-nginx-load-balancer", "with-all"]
+    container_name: gprofiler-ps-nginx-load-balancer
+    restart: always
+    # Uncomment the following lines to expose Nginx load balancer ports
+    # ports:
+    #   - "80:80"
+    #   - "443:443"
+    volumes:
+      - ../deploy/https_nginx.conf:/etc/nginx/nginx.conf
+      - ../deploy/.htpasswd:/etc/nginx/.htpasswd
+      - ../deploy/tls:/etc/nginx/tls
+    depends_on:
+      - agents-logs-backend
+      - webapp
+
+  #---
+  gprofile-tester:
+    build:
+      context: ../src/tests
+      dockerfile: Dockerfile
+    entrypoint: ["sh", "-c", "sleep 5 && python run_tests.py --test-path integration/"]
+    container_name: gprofiler-tester
+    # Uncomment the following line to run the tester in host network mode.
+    # This is useful for testing services running on the same host (but not managed by this docker compose file)
+    # without the need of extra network configuration
+    # network_mode: "host"
+    stdin_open: true
+    tty: true
+    # The following lines are commented out to avoid dependency errors when
+    # selecting different profile arrangements.
+    # If you know want to use this functionality, uncomment the lines below.
+    # Just make sure that the uncommented services will be available with the selected profiles
+    # when running docker compose.
+    # depends_on:
+    #   - webapp
+    #   - db_clickhouse
+    #   - db_postgres
+    #   - nginx-load-balancer
+    #   - ch-indexer
+    #   - periodic-tasks
+    #   - ch-rest-service
+    #   - agents-logs-backend
+    environment:
+      - TEST_BACKEND=$TEST_BACKEND
+      - TEST_DB=$TEST_DB
+      - TEST_MANAGED_BACKEND=$TEST_MANAGED_BACKEND
+      - TEST_MANAGED_DB=$TEST_MANAGED_DB
+      - BACKEND_URL=$BACKEND_URL
+      - BACKEND_PORT=$BACKEND_PORT
+      - BACKEND_USER=$BACKEND_USER
+      - BACKEND_PASSWORD=$BACKEND_PASSWORD
+      - POSTGRES_USER=$POSTGRES_USER
+      - POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+      - POSTGRES_DB=$POSTGRES_DB
+      - POSTGRES_PORT=$POSTGRES_PORT
+      - POSTGRES_HOST=$POSTGRES_HOST
+
+volumes:
+  db_clickhouse:
+    driver: local
+  db_postgres:
+    driver: local
+  logs:
+    driver: local

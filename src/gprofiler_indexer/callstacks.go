@@ -222,7 +222,10 @@ func (pw *ProfilesWriter) writeMetrics(serviceId uint32, instanceType string,
 		MemoryAverageUsedPercent: memoryAverageUsedPercent,
 		HTMLPath:                 path,
 	}
+	log.Infof("DEBUG: Sending metric record to channel - ServiceId=%d, HostName=%s, HTMLPath=%s", 
+		serviceId, hostname, path)
 	pw.metricsRecords <- metricRecord
+	log.Infof("DEBUG: Metric record sent to channel successfully")
 }
 
 func (pw *ProfilesWriter) ParseStackFrameFile(sess *session.Session, task SQSMessage, s3bucket string,
@@ -290,10 +293,17 @@ func (pw *ProfilesWriter) ParseStackFrameFile(sess *session.Session, task SQSMes
 		}
 	}
 
+	// DEBUG: Log the condition values
+	log.Infof("DEBUG: hostname=%s, htmlBlobPath='%s', CPUAvg=%f, MemoryAvg=%f", 
+		fileInfo.Metadata.Hostname, htmlBlobPath, fileInfo.Metrics.CPUAvg, fileInfo.Metrics.MemoryAvg)
+	
 	if htmlBlobPath != "" || (fileInfo.Metrics.CPUAvg != 0 && fileInfo.Metrics.MemoryAvg != 0) {
+		log.Infof("DEBUG: Writing metrics for hostname=%s", fileInfo.Metadata.Hostname)
 		pw.writeMetrics(uint32(serviceId), fileInfo.Metadata.CloudInfo.InstanceType,
 			fileInfo.Metadata.Hostname, timestamp, fileInfo.Metrics.CPUAvg,
 			fileInfo.Metrics.MemoryAvg, htmlBlobPath)
+	} else {
+		log.Infof("DEBUG: SKIPPING metrics write for hostname=%s - condition failed", fileInfo.Metadata.Hostname)
 	}
 
 	return nil
