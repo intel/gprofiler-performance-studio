@@ -2,6 +2,8 @@ module restflamedb/db
 
 go 1.24.0
 
+toolchain go1.24.0
+
 replace restflamedb/common => ../common
 
 replace restflamedb/config => ../config
