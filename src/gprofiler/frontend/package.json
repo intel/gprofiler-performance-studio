@@ -2,6 +2,9 @@
   "name": "gprofiler",
   "version": "1.0.0",
   "private": true,
+  "resolutions": {
+    "glob": "^10.5.0"
+  },
   "dependencies": {
     "@date-io/date-fns": "^2.13.1",
     "@emotion/react": "^11.9.0",
