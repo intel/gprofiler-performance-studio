@@ -1,4 +1,4 @@
-FROM node:20.19 as frontend_dependencies
+FROM node:20.19 AS frontend_dependencies
 
 ARG VITE_PRODUCTION_ENV
 ARG VITE_SERVER_HOST
