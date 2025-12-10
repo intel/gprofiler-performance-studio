@@ -38,6 +38,12 @@ services:
      - ../src/gprofiler_indexer/sql/create_ch_schema.sql:/docker-entrypoint-initdb.d/create_schema.sql
      - logs:/var/log/clickhouse-server/
      - db_clickhouse:/var/lib/clickhouse/
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # ---
   db_postgres:
@@ -49,11 +55,17 @@ services:
       - POSTGRES_PASSWORD=$POSTGRES_PASSWORD
       - POSTGRES_DB=$POSTGRES_DB
 # for debug
-#    ports:
-#      - "54321:5432"
+    ports:
+     - "5432:5432"
     volumes:
       - db_postgres:/var/lib/postgresql/data
       - ../scripts/setup/postgres/gprofiler_recreate.sql:/docker-entrypoint-initdb.d/create_scheme.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # ---
   webapp:
@@ -62,6 +74,8 @@ services:
       dockerfile: gprofiler/Dockerfile
     container_name: gprofiler-ps-webapp
     restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - BUCKET_NAME=$BUCKET_NAME
       - QUERY_API_BASE_URL=https://ch-rest-service:4433
@@ -69,6 +83,7 @@ services:
       - REST_USERNAME=$REST_USERNAME
       - REST_PASSWORD=$REST_PASSWORD
       - SQS_INDEXER_QUEUE_URL=$SQS_INDEXER_QUEUE_URL
+      - SQS_WEBAPP_QUEUE_URL=$SQS_WEBAPP_QUEUE_URL
       - GPROFILER_POSTGRES_DB_NAME=$POSTGRES_DB
       - GPROFILER_POSTGRES_PORT=$POSTGRES_PORT
       - GPROFILER_POSTGRES_HOST=$POSTGRES_HOST
@@ -78,14 +93,30 @@ services:
       - APP_LOG_LEVEL=INFO
       - AWS_METADATA_SERVICE_NUM_ATTEMPTS=100
       - REDIRECT_DOMAIN=$DOMAIN
-      - SQS_ENDPOINT_URL=https://sqs.${AWS_REGION}.amazonaws.com
+      - SQS_ENDPOINT_URL=http://localstack:4566
       - AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
       - AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
       - AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN
       - AWS_DEFAULT_REGION=$AWS_REGION
+      - SLACK_BOT_TOKEN=$SLACK_BOT_TOKEN
+      - SLACK_CHANNELS=$SLACK_CHANNELS
+      # Local Testing: S3 Endpoint for LocalStack
+      - S3_ENDPOINT_URL=$S3_ENDPOINT_URL
+      # Local Testing: Metrics Configuration
+      - METRICS_ENABLED=$METRICS_ENABLED
+      - METRICS_AGENT_URL=$METRICS_AGENT_URL
+      - METRICS_SERVICE_NAME=$METRICS_SERVICE_NAME
+      - METRICS_SLI_UUID=$METRICS_SLI_UUID
 # for debug
 #    ports:
 #      - "8888:80"
+    depends_on:
+      db_postgres:
+        condition: service_healthy
+      ch-rest-service:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
 
   # ---
   ch-rest-service:
@@ -111,6 +142,9 @@ services:
       interval: 10s
       retries: 10
       start_period: 20s
+    depends_on:
+      db_clickhouse:
+        condition: service_healthy
 
   # ---
   agents-logs-backend:
@@ -158,6 +192,8 @@ services:
       dockerfile: Dockerfile
     container_name: gprofiler-ps-ch-indexer
     restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - SQS_QUEUE_URL=$SQS_INDEXER_QUEUE_URL
       - AWS_REGION=$AWS_REGION
@@ -175,6 +211,18 @@ services:
       - AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
       - AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
       - AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN
+      # Local Testing: Metrics Configuration
+      - METRICS_ENABLED=$INDEXER_METRICS_ENABLED
+      - METRICS_AGENT_URL=$INDEXER_METRICS_AGENT_URL
+      - METRICS_SERVICE_NAME=$INDEXER_METRICS_SERVICE_NAME
+      - METRICS_SLI_UUID=$INDEXER_METRICS_SLI_UUID
+      # Local Testing: LocalStack Endpoint
+      - AWS_ENDPOINT_URL=$AWS_ENDPOINT_URL
+    depends_on:
+      localstack:
+        condition: service_healthy
+      db_clickhouse:
+        condition: service_healthy
   #---
   nginx-load-balancer:
     image: nginx:1.23.3
@@ -190,6 +238,31 @@ services:
     depends_on:
       - agents-logs-backend
       - webapp
+
+  # ---
+  # LocalStack for local S3/SQS simulation (Local Testing Only)
+  localstack:
+    image: localstack/localstack:3.0
+    container_name: gprofiler-ps-localstack
+    restart: always
+    ports:
+      - "4566:4566"  # LocalStack Gateway
+      - "4510-4559:4510-4559"  # External services port range
+    environment:
+      - SERVICES=s3,sqs
+      - DEBUG=1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    volumes:
+      - "./localstack_init:/etc/localstack/init/ready.d"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   db_clickhouse:

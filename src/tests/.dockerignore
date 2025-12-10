@@ -1,0 +1,13 @@
+# Docker related
+Dockerfile
+.dockerignore
+
+# Pytest related
+__pycache__/
+.pytest_cache/
+
+# Environment variables related
+.env
+
+# Documentation realated
+README.md

@@ -274,3 +274,28 @@ CREATE TABLE IF NOT EXISTS
     flamedb.samples_1min
     ON CLUSTER '{cluster}' AS flamedb.samples_1min_local
     ENGINE = Distributed('{cluster}', flamedb, samples_1min_local);
+
+-- Raw data: High volume, short retention
+ALTER TABLE flamedb.samples_local ON CLUSTER '{cluster}' 
+MODIFY TTL Timestamp + INTERVAL 7 DAY;
+
+-- 1-minute aggregation: Medium volume, medium retention
+ALTER TABLE flamedb.samples_1min_local ON CLUSTER '{cluster}' 
+MODIFY TTL Timestamp + INTERVAL 30 DAY;
+
+-- 1-hour aggregations: Lower volume, longer retention
+ALTER TABLE flamedb.samples_1hour_local_store ON CLUSTER '{cluster}' 
+MODIFY TTL Timestamp + INTERVAL 90 DAY;
+ALTER TABLE flamedb.samples_1hour_all_local_store ON CLUSTER '{cluster}' 
+MODIFY TTL Timestamp + INTERVAL 90 DAY;
+
+-- 1-day aggregations: Lowest volume, longest retention
+ALTER TABLE flamedb.samples_1day_local_store ON CLUSTER '{cluster}' 
+MODIFY TTL Timestamp + INTERVAL 365 DAY;
+ALTER TABLE flamedb.samples_1day_all_local_store ON CLUSTER '{cluster}' 
+MODIFY TTL Timestamp + INTERVAL 365 DAY;
+
+-- Metrics: Resource usage trends
+ALTER TABLE flamedb.metrics_local ON CLUSTER '{cluster}' 
+MODIFY TTL Timestamp + INTERVAL 90 DAY;
+

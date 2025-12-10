@@ -28,7 +28,6 @@ from backend.routers import (
 )
 from fastapi import APIRouter
 
-
 router = APIRouter()
 router.include_router(healthcheck_routes.router, prefix="/v1/health_check", tags=["agent"])
 router.include_router(healthcheck_routes.router, prefix="/v2/health_check", tags=["agent"])

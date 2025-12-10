@@ -47,6 +47,11 @@ export const PAGES = {
         label: 'Login',
         to: '/login',
     },
+    profiling: {
+        key: 'profiling',
+        label: 'Dynamic Profiling',
+        to: '/profiling',
+    },
 };
 
 export const EXTERNAL_URLS = {

@@ -65,6 +65,8 @@ func ListenSqs(ctx context.Context, args *CLIArgs, ch chan<- SQSMessage, wg *syn
 
 	if err != nil {
 		logger.Errorf("Got an error getting the queue URL: %v", err)
+		
+		// SLI Metric: SQS queue URL resolution failure (infrastructure error - counts against SLO)
 		return
 	}
 
@@ -81,6 +83,8 @@ func ListenSqs(ctx context.Context, args *CLIArgs, ch chan<- SQSMessage, wg *syn
 			})
 			if recvErr != nil {
 				logger.Error(recvErr)
+				
+				// SLI Metric: SQS message receive failure (infrastructure error - counts against SLO)
 				continue
 			}
 
@@ -88,7 +92,24 @@ func ListenSqs(ctx context.Context, args *CLIArgs, ch chan<- SQSMessage, wg *syn
 				var sqsMessage SQSMessage
 				parseErr := json.Unmarshal([]byte(*message.Body), &sqsMessage)
 				if parseErr != nil {
-					logger.Errorf("Error while parsing %v", parseErr)
+					logger.Errorf("Error while parsing SQS message body: %v", parseErr)
+					
+					// SLI Metric: SQS message parse failure (client error - malformed JSON)
+					
+					// Delete malformed messages to prevent infinite retry loop
+					// This is a permanent client error that won't be fixed by retrying
+					svc := sqs.New(sess)
+					_, deleteErr := svc.DeleteMessage(&sqs.DeleteMessageInput{
+						QueueUrl:      urlResult.QueueUrl,
+						ReceiptHandle: message.ReceiptHandle,
+					})
+					if deleteErr != nil {
+						logger.Errorf("Failed to delete malformed message: %v", deleteErr)
+
+						// SLI Metric: SQS message deletion failure (infrastructure error - counts against SLO)
+					} else {
+						logger.Warnf("Deleted malformed SQS message to prevent reprocessing")
+					}
 					continue
 				}
 				sqsMessage.QueueURL = *urlResult.QueueUrl
