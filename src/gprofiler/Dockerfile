@@ -73,9 +73,9 @@ USER non_root
 RUN logrotate /etc/nginx/logrotate.conf
 
 # finally, always(!) update external files
-# https://github.com/instrumenta/kubeval use this source to retrieve schema
+# https://github.com/yannh/kubeconform use this source to retrieve schema
 RUN mkdir backend/utils/daemonset_files && \
-    curl -f "https://kubernetesjsonschema.dev/master/daemonsetspec.json" -o "backend/utils/daemonset_files/daemonsetspec.json" && \
+    curl -f "https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/v1.35.0/daemonsetspec.json" -o "backend/utils/daemonset_files/daemonsetspec.json" && \
     curl -Lf "https://raw.githubusercontent.com/intel/gprofiler/master/deploy/k8s/gprofiler.yaml" -o "backend/utils/daemonset_files/daemonset.yml"
 
 RUN mkdir backend/utils/ecs_files && \
