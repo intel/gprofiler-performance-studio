@@ -39,6 +39,12 @@ export const DATA_URLS = {
     GET_NODES_AND_CORES_GRAPH_METRICS: `${API_PREFIX}/metrics/graph/nodes_and_cores`,
     GET_SAMPLES: `${API_PREFIX}/metrics/samples`,
     GET_API_KEY: `${API_PREFIX}/api_key`,
+    // Profiling endpoints
+    GET_PROFILING_HOST_STATUS: `${API_PREFIX}/metrics/profiling/host_status`,
+    POST_PROFILING_REQUEST: `${API_PREFIX}/metrics/profile_request`,
+    POST_HEARTBEAT: `${API_PREFIX}/metrics/heartbeat`,
+    POST_COMMAND_COMPLETION: `${API_PREFIX}/metrics/command_completion`,
+    // Filter endpoints
     FILTERS: `${API_PREFIX}${FILETERS_PREFIX}`,
     GET_FILTER_OPTIONS_VALUE: (filterType, params) =>
         `${API_PREFIX}${FILETERS_PREFIX}/tags/${filterType}?${stringify(params)}`,

@@ -19,7 +19,6 @@ from datetime import datetime
 from backend import routers
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response
-from pydantic.json import ENCODERS_BY_TYPE
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
@@ -30,7 +29,6 @@ def format_time(dt: datetime):
     return iso_format + "Z"
 
 
-ENCODERS_BY_TYPE[datetime] = lambda dt: format_time(dt)
 app = FastAPI(openapi_url="/api/v1/openapi.json", docs_url="/api/v1/docs")
 
 

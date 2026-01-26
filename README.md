@@ -272,6 +272,7 @@ as ClickHouse needs to rewrite TTL information for all involved partitions.
 This operation is synchronous.
 
 ## Local running and development
+For more detailed instructions (already partially covered on at the [usage](#usage) section) on how to setup a development environment, please refer to [this guide](deploy/README.md)
 
 To develop the project, it may be useful to run each component locally, see relevant README in each service
 - [webapp (backend and frontend)](src/gprofiler/README.md)

@@ -29,9 +29,7 @@ GH_RELEASES_API = "https://api.github.com/repos/intel/gprofiler/releases/latest"
 DAEMON_SET_URL = "https://raw.githubusercontent.com/intel/gprofiler/master/deploy/k8s/gprofiler.yaml"
 ECS_URL = "https://raw.githubusercontent.com/intel/gprofiler/blob/master/deploy/ecs/gprofiler_task_definition.json"
 ANSIBLE_URL = "https://raw.githubusercontent.com/intel/gprofiler/master/deploy/ansible/gprofiler_playbook.yml"
-DOCKER_COMPOSE_URL = (
-    "https://raw.githubusercontent.com/intel/gprofiler/master/deploy/docker-compose/docker-compose.yml"
-)
+DOCKER_COMPOSE_URL = "https://raw.githubusercontent.com/intel/gprofiler/master/deploy/docker-compose/docker-compose.yml"
 GH_PUBLISH_DATE_REQUEST_TIMEOUT = 30
 
 FILE_URLS = {

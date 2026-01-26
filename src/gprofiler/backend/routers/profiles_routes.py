@@ -30,7 +30,7 @@ from cmp_version import VersionString
 from fastapi import APIRouter, Header, HTTPException, Request
 from gprofiler_dev import get_s3_profile_dal
 from gprofiler_dev.api_key import get_service_by_api_key
-from gprofiler_dev.client_handler import ClientHandler
+from gprofiler_dev.client_handler import ClientHandler 
 from gprofiler_dev.postgres.db_manager import DBManager
 from gprofiler_dev.postgres.schemas import AgentMetadata, GetServiceResponse
 from gprofiler_dev.profiles_utils import get_gprofiler_metadata_utils, get_gprofiler_utils
@@ -53,6 +53,8 @@ def new_profile_v2(
     gprofiler_api_key: str = Header(...),
     gprofiler_service_name: str = Header(...),
 ):
+    hostname = "unknown"
+    
     try:
         service_name, token_id = get_service_by_api_key(gprofiler_api_key, gprofiler_service_name)
         if not service_name:
@@ -145,7 +147,7 @@ def new_profile_v2(
                 raise HTTPException(400, {"message": error_msg})
 
             tags.append(f"{HOSTNAME_KEY}:{hostname}")
-        except Exception:
+        except Exception as e:
             exception_msg = "Failed to parse v2 metadata"
             logger.exception(exception_msg)
             raise HTTPException(400, {"message": exception_msg})
@@ -164,7 +166,12 @@ def new_profile_v2(
         profile_file_size = len(profile_data)
         compressed_profile = gzip.compress(profile_data)
         compressed_profile_file_size = len(compressed_profile)
-        client_handler.write_file(profile_file_path, compressed_profile)
+        
+        try:
+            client_handler.write_file(profile_file_path, compressed_profile)
+        except Exception as s3_error:
+            logger.error(f"Failed to write profile to S3: {s3_error}")
+            raise HTTPException(500, {"message": "Failed to store profile data"})
 
         service_sample_threshold = db_manager.get_service_sample_threshold_by_id(service_id)
         random_value = random.uniform(0.0, 1.0)
@@ -190,14 +197,21 @@ def new_profile_v2(
             try:
                 sqs.send_message(QueueUrl=config.SQS_INDEXER_QUEUE_URL, MessageBody=json.dumps(msg))
                 logger.info("send task to queue", extra=extra_info)
-            except sqs.exceptions.QueueDoesNotExist:
-                logger.error(f"Queue `{config.SQS_INDEXER_QUEUE_URL}` does not exist, failed to send message {msg}")
+            except Exception as sqs_error:
+                logger.error(f"Failed to send message to SQS: {sqs_error}")
+                raise HTTPException(500, {"message": "Failed to process profile upload"})
         else:
             logger.info("drop task due sampling", extra=extra_info)
 
     except KeyError as key_error:
+        # Client error - missing parameter
         raise HTTPException(400, {"message": f"Missing parameter {key_error}"})
-    except Exception:
+    except HTTPException:
+        # HTTPException already handled above (with ignored_failure metric)
+        # Let FastAPI handle it without sending additional metrics
+        raise
+    except Exception as e:
+        # Server error - counts against SLO
         if os.path.exists(".debug"):
             import sys
             import traceback
@@ -216,5 +230,8 @@ def new_profile_v2(
                 f"An error has occurred while trying to prepare service: {service_name} "
                 f"client: {client_handler} " + repr(e)
             )
+            # Server error - counts against SLO
             raise HTTPException(400, {"message": "Failed to register the new service"})
+    
+    # Success - profile uploaded and processed successfully
     return ProfileResponse(message="ok", gpid=int(gpid))

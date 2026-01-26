@@ -47,8 +47,10 @@ class S3ProfileDal:
                     aws_secret_access_key=config.AWS_SECRET_ACCESS_KEY,
                     aws_session_token=config.AWS_SESSION_TOKEN,
                 )
-        self._s3_client = session.client("s3", config=Config(max_pool_connections=50))
-        self._s3_resource = session.resource("s3")
+        # endpoint_url allows connecting to LocalStack or S3-compatible services for testing
+        # When None (default), uses standard AWS S3 endpoints
+        self._s3_client = session.client("s3", config=Config(max_pool_connections=50), endpoint_url=config.S3_ENDPOINT_URL)
+        self._s3_resource = session.resource("s3", endpoint_url=config.S3_ENDPOINT_URL)
 
     @staticmethod
     def join_path(*parts: str) -> str:

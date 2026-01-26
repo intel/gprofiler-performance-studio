@@ -60,7 +60,7 @@ class FilterTags:
 
 
 def get_hash_filter_tag(filter_tag):
-    return hashlib.new('md5', filter_tag.encode("utf-8"), usedforsecurity=False).hexdigest()
+    return hashlib.new("md5", filter_tag.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 def is_base(input_str: str, base: int) -> bool:

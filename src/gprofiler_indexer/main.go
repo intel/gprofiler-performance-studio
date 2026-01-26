@@ -46,6 +46,7 @@ func main() {
 	args.ParseArgs()
 
 	logger.Infof("Starting %s", AppName)
+	
 	tasks := make(chan SQSMessage, args.Concurrency)
 	channels := RecordChannels{
 		StacksRecords:  make(chan StackRecord, args.ClickHouseStacksBatchSize),
@@ -107,5 +108,6 @@ func main() {
 	}()
 
 	buffWriterWaitGroup.Wait()
+	
 	logger.Info("Graceful shutdown")
 }

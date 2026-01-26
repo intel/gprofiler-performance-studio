@@ -43,6 +43,7 @@ export const TIME_UNITS = {
 export const TIME_FORMATS = {
     DATETIME_BASIC: `yyyy-MM-dd'T'HH:mm:00`,
     DATETIME_PRINTED: 'dd/MM/yyyy HH:mm',
+    DATETIME_WITH_SECONDS: 'dd/MM/yyyy HH:mm:ss',
     DATE_BASIC: 'dd/MM/yyyy',
     TIME_24H: 'HH:mm',
 };

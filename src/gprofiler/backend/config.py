@@ -40,4 +40,19 @@ REST_CERTIFICATE_PATH = os.getenv("REST_CERTIFICATE_PATH", REST_VERIFY_TLS)
 REST_USERNAME = os.getenv("REST_USERNAME", "")
 REST_PASSWORD = os.getenv("REST_PASSWORD", "")
 
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+
+# Default Slack channels - can be overridden via SLACK_CHANNELS environment variable
+# Format: comma-separated list of channel names (e.g., "#general,#alerts,#notifications")
+DEFAULT_SLACK_CHANNELS = ["#gprofiler-notifications"]
+SLACK_CHANNELS = os.getenv("SLACK_CHANNELS", ",".join(DEFAULT_SLACK_CHANNELS)).split(",")
+
+# Metrics Publisher Configuration
+# Enable/disable metrics publishing to metrics agent (similar to gprofiler agent metrics)
+# Metrics agent handles batching/queuing on its end, so we send synchronously
+METRICS_ENABLED = os.getenv("METRICS_ENABLED", "false").lower() in ["true", "1", "yes"]
+METRICS_AGENT_URL = os.getenv("METRICS_AGENT_URL", "tcp://localhost:18126")
+METRICS_SERVICE_NAME = os.getenv("METRICS_SERVICE_NAME", "gprofiler-webapp")
+METRICS_SLI_UUID = os.getenv("METRICS_SLI_UUID", None)
+
 BACKEND_ROOT = os.path.dirname(os.path.realpath(__file__))

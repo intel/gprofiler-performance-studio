@@ -47,6 +47,9 @@ const MuiTable = ({
     autoPageSize = false,
     size = 'normal',
     sx = undefined,
+    checkboxSelection = false,
+    onSelectionModelChange = undefined,
+    selectionModel = [],
 }) => {
     const isDarkMode = variant !== 'light';
     const isSmallTableMode = size === 'small';
@@ -89,11 +92,13 @@ const MuiTable = ({
                 disableColumnFilter
                 disableColumnMenu
                 disableColumnSelector
-                disableSelectionOnClick
                 initialState={initialState}
                 disableVirtualization={multipleLinesCells}
                 getRowId={getRowId}
                 autoPageSize={autoPageSize}
+                checkboxSelection={checkboxSelection}
+                onSelectionModelChange={onSelectionModelChange}
+                selectionModel={selectionModel}
             />
         </Box>
     );
