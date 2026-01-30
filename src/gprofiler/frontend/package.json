@@ -51,7 +51,7 @@
   "devDependencies": {
     "@mui/lab": "^5.0.0-alpha.79",
     "@vitejs/plugin-react": "^2.2.0",
-    "eslint": "^7.32.0",
+    "eslint": "^9.26.0",
     "eslint-config-prettier": "^8.3.0",
     "eslint-config-react": "^1.1.7",
     "eslint-plugin-mdx": "^2.2.0",
