@@ -167,6 +167,7 @@ const ProfilingTopPanel = ({
                                         onChange={(e) => onPerfSpectChange(e.target.checked)}
                                         size="small"
                                         color="primary"
+                                        disabled
                                     />
                                 }
                                 label={
@@ -175,6 +176,7 @@ const ProfilingTopPanel = ({
                                     </Typography>
                                 }
                                 sx={{ ml: 1 }}
+                                disabled
                             />
                         </Tooltip>
                         
