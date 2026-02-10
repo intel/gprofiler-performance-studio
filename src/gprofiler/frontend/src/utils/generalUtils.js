@@ -16,7 +16,6 @@
      */
 }
 
-/* eslint-disable no-loop-func */
 /*
  * Trampoline to avoid recursion in JavaScript, see:
  *     https://www.integralist.co.uk/posts/functional-recursive-javascript-programming/
