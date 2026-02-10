@@ -149,7 +149,6 @@ const ListboxComponent = forwardRef(function ListboxComponent(props, ref) {
 });
 
 function PopperComponent(props) {
-    // eslint-disable-next-line no-unused-vars
     const { disablePortal, anchorEl, open, ...other } = props;
     return <StyledAutocompletePopper {...other} />;
 }

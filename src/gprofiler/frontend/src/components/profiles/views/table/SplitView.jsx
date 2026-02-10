@@ -95,7 +95,7 @@ export const SplitView = ({ fgData, width, height, tableMappingData }) => {
 
     const calledByFgData = useMemo(
         () => getSplitViewParsedCalledByFG(fgData, tableMappingData),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+
         [fgData, tableMappingData]
     );
 

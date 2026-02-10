@@ -165,7 +165,6 @@ const ProfilesViews = () => {
                 framesSelected
             ),
         ];
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchedData, framesSelected]);
 
     useEffect(() => {
