@@ -1,4 +1,18 @@
-import { Box, Button, Divider, Typography, FormControlLabel, Checkbox, Tooltip, TextField, Radio, RadioGroup, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
+import {
+    Accordion,
+    AccordionDetails,
+    AccordionSummary,
+    Box,
+    Button,
+    Checkbox,
+    Divider,
+    FormControlLabel,
+    Radio,
+    RadioGroup,
+    TextField,
+    Tooltip,
+    Typography,
+} from '@mui/material';
 import React from 'react';
 
 import { COLORS } from '../../../theme/colors';
@@ -27,9 +41,9 @@ const ProfilingTopPanel = ({
 
     // Helper function to handle profiler config changes
     const handleProfilerConfigChange = (profilerKey, value) => {
-        onProfilerConfigsChange(prev => ({
+        onProfilerConfigsChange((prev) => ({
             ...prev,
-            [profilerKey]: value
+            [profilerKey]: value,
         }));
     };
 
@@ -40,10 +54,15 @@ const ProfilingTopPanel = ({
             name: 'Perf Profiler',
             description: 'C, C++, Go, Kernel',
             options: [
-                { value: 'enabled_restricted', label: 'Enabled Restricted', tooltip: 'Profiles only top N containers/process', default: true },
+                {
+                    value: 'enabled_restricted',
+                    label: 'Enabled Restricted',
+                    tooltip: 'Profiles only top N containers/process',
+                    default: true,
+                },
                 { value: 'enabled_aggressive', label: 'Enabled Aggressive', tooltip: 'Profiles all processes' },
-                { value: 'disabled', label: 'Disabled' }
-            ]
+                { value: 'disabled', label: 'Disabled' },
+            ],
         },
         {
             key: 'async_profiler',
@@ -51,8 +70,8 @@ const ProfilingTopPanel = ({
             description: 'Java',
             options: [
                 { value: 'enabled', label: 'Enabled', default: true },
-                { value: 'disabled', label: 'Disabled' }
-            ]
+                { value: 'disabled', label: 'Disabled' },
+            ],
         },
         {
             key: 'pyperf',
@@ -60,8 +79,8 @@ const ProfilingTopPanel = ({
             description: "Python's highly optimized eBPF. Exception - arm64 hosts",
             options: [
                 { value: 'enabled', label: 'Enabled', default: true },
-                { value: 'disabled', label: 'Disabled' }
-            ]
+                { value: 'disabled', label: 'Disabled' },
+            ],
         },
         {
             key: 'pyspy',
@@ -70,8 +89,8 @@ const ProfilingTopPanel = ({
             options: [
                 { value: 'enabled_fallback', label: 'Enabled as Fallback for Pyperf', default: true },
                 { value: 'enabled', label: 'Enabled' },
-                { value: 'disabled', label: 'Disabled' }
-            ]
+                { value: 'disabled', label: 'Disabled' },
+            ],
         },
         {
             key: 'rbspy',
@@ -79,8 +98,8 @@ const ProfilingTopPanel = ({
             description: 'Ruby',
             options: [
                 { value: 'enabled', label: 'Enabled', default: true },
-                { value: 'disabled', label: 'Disabled' }
-            ]
+                { value: 'disabled', label: 'Disabled' },
+            ],
         },
         {
             key: 'phpspy',
@@ -88,8 +107,8 @@ const ProfilingTopPanel = ({
             description: 'PHP',
             options: [
                 { value: 'enabled', label: 'Enabled', default: true },
-                { value: 'disabled', label: 'Disabled' }
-            ]
+                { value: 'disabled', label: 'Disabled' },
+            ],
         },
         {
             key: 'dotnet_trace',
@@ -97,8 +116,8 @@ const ProfilingTopPanel = ({
             description: '.NET',
             options: [
                 { value: 'enabled', label: 'Enabled', default: true },
-                { value: 'disabled', label: 'Disabled' }
-            ]
+                { value: 'disabled', label: 'Disabled' },
+            ],
         },
         {
             key: 'nodejs_perf',
@@ -106,9 +125,9 @@ const ProfilingTopPanel = ({
             description: 'NodeJS',
             options: [
                 { value: 'enabled', label: 'Enabled', default: true },
-                { value: 'disabled', label: 'Disabled' }
-            ]
-        }
+                { value: 'disabled', label: 'Disabled' },
+            ],
+        },
     ];
 
     return (
@@ -157,21 +176,20 @@ const ProfilingTopPanel = ({
                             disabled={loading}>
                             Refresh
                         </Button>
-                        
                         {/* PerfSpect Hardware Metrics Checkbox */}
-                        <Tooltip title="Enable Intel PerfSpect hardware metrics collection (auto-installs on agents)">
+                        <Tooltip title='Enable Intel PerfSpect hardware metrics collection (auto-installs on agents)'>
                             <FormControlLabel
                                 control={
                                     <Checkbox
                                         checked={enablePerfSpect}
                                         onChange={(e) => onPerfSpectChange(e.target.checked)}
-                                        size="small"
-                                        color="primary"
+                                        size='small'
+                                        color='primary'
                                         disabled
                                     />
                                 }
                                 label={
-                                    <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
+                                    <Typography variant='body2' sx={{ fontSize: '0.875rem' }}>
                                         PerfSpect HW Metrics
                                     </Typography>
                                 }
@@ -179,11 +197,11 @@ const ProfilingTopPanel = ({
                                 disabled
                             />
                         </Tooltip>
-                        
+
                         {/* Profiling Frequency Field */}
-                        <Tooltip title="Number of samples per second for profiling duration (Hz)">
+                        <Tooltip title='Number of samples per second for profiling duration (Hz)'>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 5 }}>
-                                <Typography variant="body2" sx={{ fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                                <Typography variant='body2' sx={{ fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
                                     Profiling Frequency:
                                 </Typography>
                                 <TextField
@@ -194,31 +212,31 @@ const ProfilingTopPanel = ({
                                             onProfilingFrequencyChange(value);
                                         }
                                     }}
-                                    type="number"
-                                    size="small"
+                                    type='number'
+                                    size='small'
                                     inputProps={{
                                         min: 1,
                                         max: 1000,
-                                        style: { textAlign: 'center' }
+                                        style: { textAlign: 'center' },
                                     }}
                                     sx={{
                                         width: '70px',
                                         '& .MuiOutlinedInput-root': {
                                             height: '32px',
-                                            fontSize: '0.875rem'
-                                        }
+                                            fontSize: '0.875rem',
+                                        },
                                     }}
                                 />
-                                <Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                                <Typography variant='body2' sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
                                     Hz
                                 </Typography>
                             </Box>
                         </Tooltip>
-                        
+
                         {/* Max Processes Field */}
-                        <Tooltip title="Maximum number of processes to profile per runtime profiler (all profilers except perf and ebpf)">
+                        <Tooltip title='Maximum number of processes to profile per runtime profiler (all profilers except perf and ebpf)'>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 5 }}>
-                                <Typography variant="body2" sx={{ fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                                <Typography variant='body2' sx={{ fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
                                     Max Processes:
                                 </Typography>
                                 <TextField
@@ -229,22 +247,22 @@ const ProfilingTopPanel = ({
                                             onMaxProcessesChange(value);
                                         }
                                     }}
-                                    type="number"
-                                    size="small"
+                                    type='number'
+                                    size='small'
                                     inputProps={{
                                         min: 0,
                                         max: 1000,
-                                        style: { textAlign: 'center' }
+                                        style: { textAlign: 'center' },
                                     }}
                                     sx={{
                                         width: '70px',
                                         '& .MuiOutlinedInput-root': {
                                             height: '32px',
-                                            fontSize: '0.875rem'
-                                        }
+                                            fontSize: '0.875rem',
+                                        },
                                     }}
                                 />
-                                <Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                                <Typography variant='body2' sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
                                     procs
                                 </Typography>
                             </Box>
@@ -269,48 +287,54 @@ const ProfilingTopPanel = ({
                 <Accordion sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
                     <AccordionSummary
                         expandIcon={<Typography sx={{ fontSize: '1.2rem' }}>▼</Typography>}
-                        sx={{ 
+                        sx={{
                             backgroundColor: '#f5f5f5',
                             '& .MuiAccordionSummary-content': {
-                                alignItems: 'center'
-                            }
-                        }}
-                    >
-                        <Typography variant="body2" sx={{ fontSize: '0.875rem', fontWeight: 500 }}>
+                                alignItems: 'center',
+                            },
+                        }}>
+                        <Typography variant='body2' sx={{ fontSize: '0.875rem', fontWeight: 500 }}>
                             Click for Advanced Profiler Configuration
                         </Typography>
                     </AccordionSummary>
                     <AccordionDetails sx={{ p: 3 }}>
-                        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 3 }}>
+                        <Box
+                            sx={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                                gap: 3,
+                            }}>
                             {profilerDefinitions.map((profiler) => (
-                                <Box key={profiler.key} sx={{ 
-                                    border: '1px solid #e0e0e0', 
-                                    borderRadius: 2, 
-                                    p: 2,
-                                    backgroundColor: '#fafafa'
-                                }}>
-                                    <Typography variant="body2" sx={{ fontSize: '0.875rem', fontWeight: 600, mb: 0.5 }}>
+                                <Box
+                                    key={profiler.key}
+                                    sx={{
+                                        border: '1px solid #e0e0e0',
+                                        borderRadius: 2,
+                                        p: 2,
+                                        backgroundColor: '#fafafa',
+                                    }}>
+                                    <Typography variant='body2' sx={{ fontSize: '0.875rem', fontWeight: 600, mb: 0.5 }}>
                                         {profiler.name}
                                     </Typography>
-                                    <Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 2 }}>
+                                    <Typography
+                                        variant='body2'
+                                        sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 2 }}>
                                         {profiler.description}
                                     </Typography>
                                     <RadioGroup
                                         value={profilerConfigs[profiler.key]}
-                                        onChange={(e) => handleProfilerConfigChange(profiler.key, e.target.value)}
-                                    >
+                                        onChange={(e) => handleProfilerConfigChange(profiler.key, e.target.value)}>
                                         {profiler.options.map((option) => (
-                                            <Tooltip 
-                                                key={option.value} 
-                                                title={option.tooltip || ''} 
-                                                placement="right"
-                                                arrow
-                                            >
+                                            <Tooltip
+                                                key={option.value}
+                                                title={option.tooltip || ''}
+                                                placement='right'
+                                                arrow>
                                                 <FormControlLabel
                                                     value={option.value}
-                                                    control={<Radio size="small" />}
+                                                    control={<Radio size='small' />}
                                                     label={
-                                                        <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>
+                                                        <Typography variant='body2' sx={{ fontSize: '0.75rem' }}>
                                                             {option.label}
                                                         </Typography>
                                                     }
