@@ -23,7 +23,7 @@ import json
 import uuid
 from datetime import datetime
 from logging import getLogger
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 logger = getLogger(__name__)
 
@@ -273,10 +273,10 @@ class ProfilingDBMethods:
             if additional_args:
                 if "additional_args" not in combined:
                     combined["additional_args"] = {}
-                combined["additional_args"].update(additional_args)  # type: ignore[attr-defined]
+                cast(Dict[str, Any], combined["additional_args"]).update(additional_args)
 
         # Remove duplicates from PIDs
-        combined["pids"] = list(set(combined["pids"]))  # type: ignore[arg-type]
+        combined["pids"] = list(set(cast(List[Any], combined["pids"])))
 
         return combined
 

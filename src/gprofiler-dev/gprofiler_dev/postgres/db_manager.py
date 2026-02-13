@@ -942,7 +942,9 @@ class DBManager(metaclass=Singleton):
 
         return self.db.execute(query, values, one_value=False, return_dict=True, fetch_all=True)
 
-    def get_host_heartbeats_by_service(self, service_name: str, limit: Optional[int] = None, exact_match: bool = False) -> List[Dict]:
+    def get_host_heartbeats_by_service(
+        self, service_name: str, limit: Optional[int] = None, exact_match: bool = False
+    ) -> List[Dict]:
         """Get all host heartbeat records for a specific service with optional partial matching"""
         if exact_match:
             # Use exact match for backward compatibility
@@ -1061,7 +1063,7 @@ class DBManager(metaclass=Singleton):
             "frequency": request_result["frequency"],
             "profiling_mode": request_result["profiling_mode"],
         }
-        
+
         # Merge additional_args directly into new_config
         if request_result["additional_args"]:
             additional_args = request_result["additional_args"]
@@ -1347,7 +1349,7 @@ class DBManager(metaclass=Singleton):
         profiling_statuses: Optional[List[str]] = None,
         command_types: Optional[List[str]] = None,
         pids: Optional[List[int]] = None,
-        exact_match: bool = False
+        exact_match: bool = False,
     ) -> List[Dict]:
         """
         Get profiling host status with all filters applied in a single optimized query.
@@ -1451,7 +1453,7 @@ class DBManager(metaclass=Singleton):
             status_conditions = []
             has_stopped = False
             for idx, status in enumerate(profiling_statuses):
-                if status.lower() == 'stopped':
+                if status.lower() == "stopped":
                     has_stopped = True
                 else:
                     param_name = f"status_{idx}"
@@ -1469,7 +1471,7 @@ class DBManager(metaclass=Singleton):
             command_type_conditions = []
             has_na = False
             for idx, cmd_type in enumerate(command_types):
-                if cmd_type.lower() == 'n/a':
+                if cmd_type.lower() == "n/a":
                     has_na = True
                 else:
                     param_name = f"command_type_{idx}"

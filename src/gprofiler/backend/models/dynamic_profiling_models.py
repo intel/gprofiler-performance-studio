@@ -32,13 +32,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
-
 # ============================================================
 # ENUMS
 # ============================================================
 
+
 class CommandType(str, Enum):
     """Command types for profiling operations"""
+
     START = "start"
     STOP = "stop"
     RECONFIGURE = "reconfigure"
@@ -46,6 +47,7 @@ class CommandType(str, Enum):
 
 class ProfilingStatus(str, Enum):
     """Status for profiling requests and executions"""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -55,6 +57,7 @@ class ProfilingStatus(str, Enum):
 
 class ProfilingMode(str, Enum):
     """Profiling modes supported by the system"""
+
     CPU = "cpu"
     MEMORY = "memory"
     ALLOCATION = "allocation"
@@ -65,11 +68,13 @@ class ProfilingMode(str, Enum):
 # REQUEST MODELS
 # ============================================================
 
+
 class ProfilingRequestCreate(BaseModel):
     """
     Request model for creating a new profiling request via API.
     At least one target specification must be provided.
     """
+
     # Target specification (at least one required)
     service_name: Optional[str] = None
     job_name: Optional[str] = None
@@ -91,7 +96,7 @@ class ProfilingRequestCreate(BaseModel):
     stop_time: Optional[datetime] = None
     mode: Optional[str] = None
 
-    @field_validator('duration_seconds')
+    @field_validator("duration_seconds")
     @classmethod
     def validate_duration(cls, v: int) -> int:
         if v <= 0:
@@ -114,6 +119,7 @@ class ProfilingRequestCreate(BaseModel):
 
 class ProfilingRequestResponse(BaseModel):
     """Response model for profiling request"""
+
     id: int
     request_id: UUID
     service_name: Optional[str] = None
@@ -140,6 +146,7 @@ class ProfilingRequestResponse(BaseModel):
 
 class ProfilingRequestUpdate(BaseModel):
     """Model for updating profiling request status"""
+
     status: Optional[ProfilingStatus] = None
     stop_time: Optional[datetime] = None
 
@@ -148,8 +155,10 @@ class ProfilingRequestUpdate(BaseModel):
 # COMMAND MODELS
 # ============================================================
 
+
 class ProfilingCommandCreate(BaseModel):
     """Model for creating a profiling command to be sent to agents"""
+
     profiling_request_id: int
     host_id: str
     target_containers: List[str] = Field(default_factory=list)
@@ -161,6 +170,7 @@ class ProfilingCommandCreate(BaseModel):
 
 class ProfilingCommandResponse(BaseModel):
     """Response model for profiling command"""
+
     id: int
     command_id: UUID
     profiling_request_id: int
@@ -182,6 +192,7 @@ class ProfilingCommandResponse(BaseModel):
 
 class ProfilingCommandUpdate(BaseModel):
     """Model for updating profiling command"""
+
     status: Optional[ProfilingStatus] = None
     sent_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -192,11 +203,13 @@ class ProfilingCommandUpdate(BaseModel):
 # HEARTBEAT MODELS
 # ============================================================
 
+
 class HostHeartbeatCreate(BaseModel):
     """
     Model for creating/updating host heartbeat.
     Optimized for 165k QPM with sub-second response times.
     """
+
     host_id: str
     service_name: Optional[str] = None
     host_name: str
@@ -212,6 +225,7 @@ class HostHeartbeatCreate(BaseModel):
 
 class HostHeartbeatResponse(BaseModel):
     """Response model for host heartbeat"""
+
     id: int
     host_id: str
     service_name: Optional[str] = None
@@ -235,6 +249,7 @@ class HostHeartbeatResponse(BaseModel):
 
 class HostHeartbeatUpdate(BaseModel):
     """Model for updating host heartbeat (typically just timestamp)"""
+
     timestamp_last_seen: datetime
     last_command_id: Optional[UUID] = None
     containers: Optional[List[str]] = None
@@ -247,8 +262,10 @@ class HostHeartbeatUpdate(BaseModel):
 # EXECUTION MODELS
 # ============================================================
 
+
 class ProfilingExecutionCreate(BaseModel):
     """Model for creating profiling execution audit entry"""
+
     profiling_request_id: int
     profiling_command_id: Optional[int] = None
     host_name: str
@@ -261,6 +278,7 @@ class ProfilingExecutionCreate(BaseModel):
 
 class ProfilingExecutionResponse(BaseModel):
     """Response model for profiling execution"""
+
     id: int
     execution_id: UUID
     profiling_request_id: int
@@ -281,6 +299,7 @@ class ProfilingExecutionResponse(BaseModel):
 
 class ProfilingExecutionUpdate(BaseModel):
     """Model for updating profiling execution"""
+
     status: Optional[ProfilingStatus] = None
     completed_at: Optional[datetime] = None
 
@@ -289,14 +308,17 @@ class ProfilingExecutionUpdate(BaseModel):
 # MAPPING TABLE MODELS
 # ============================================================
 
+
 class NamespaceServiceMapping(BaseModel):
     """Model for namespace to service mapping"""
+
     namespace: str
     service_name: str
 
 
 class NamespaceServiceMappingResponse(NamespaceServiceMapping):
     """Response model for namespace service mapping"""
+
     id: int
     created_at: datetime
     updated_at: datetime
@@ -307,12 +329,14 @@ class NamespaceServiceMappingResponse(NamespaceServiceMapping):
 
 class ServiceContainerMapping(BaseModel):
     """Model for service to container mapping"""
+
     service_name: str
     container_name: str
 
 
 class ServiceContainerMappingResponse(ServiceContainerMapping):
     """Response model for service container mapping"""
+
     id: int
     created_at: datetime
     updated_at: datetime
@@ -323,12 +347,14 @@ class ServiceContainerMappingResponse(ServiceContainerMapping):
 
 class JobContainerMapping(BaseModel):
     """Model for job to container mapping"""
+
     job_name: str
     container_name: str
 
 
 class JobContainerMappingResponse(JobContainerMapping):
     """Response model for job container mapping"""
+
     id: int
     created_at: datetime
     updated_at: datetime
@@ -339,6 +365,7 @@ class JobContainerMappingResponse(JobContainerMapping):
 
 class ContainerProcessMapping(BaseModel):
     """Model for container to process mapping"""
+
     container_name: str
     process_id: int
     process_name: Optional[str] = None
@@ -346,6 +373,7 @@ class ContainerProcessMapping(BaseModel):
 
 class ContainerProcessMappingResponse(ContainerProcessMapping):
     """Response model for container process mapping"""
+
     id: int
     created_at: datetime
     updated_at: datetime
@@ -356,6 +384,7 @@ class ContainerProcessMappingResponse(ContainerProcessMapping):
 
 class ContainerHostMapping(BaseModel):
     """Model for container to host mapping"""
+
     container_name: str
     host_id: str
     host_name: str
@@ -363,6 +392,7 @@ class ContainerHostMapping(BaseModel):
 
 class ContainerHostMappingResponse(ContainerHostMapping):
     """Response model for container host mapping"""
+
     id: int
     created_at: datetime
     updated_at: datetime
@@ -373,6 +403,7 @@ class ContainerHostMappingResponse(ContainerHostMapping):
 
 class ProcessHostMapping(BaseModel):
     """Model for process to host mapping"""
+
     process_id: int
     host_id: str
     host_name: str
@@ -380,6 +411,7 @@ class ProcessHostMapping(BaseModel):
 
 class ProcessHostMappingResponse(ProcessHostMapping):
     """Response model for process host mapping"""
+
     id: int
     created_at: datetime
     updated_at: datetime
@@ -392,8 +424,10 @@ class ProcessHostMappingResponse(ProcessHostMapping):
 # QUERY MODELS
 # ============================================================
 
+
 class ProfilingRequestQuery(BaseModel):
     """Query parameters for listing profiling requests"""
+
     status: Optional[ProfilingStatus] = None
     service_name: Optional[str] = None
     namespace: Optional[str] = None
@@ -407,6 +441,7 @@ class HostHeartbeatQuery(BaseModel):
     Query parameters for listing host heartbeats.
     Optimized for fast queries to support 165k QPM.
     """
+
     service_name: Optional[str] = None
     namespace: Optional[str] = None
     host_id: Optional[str] = None
@@ -417,13 +452,10 @@ class HostHeartbeatQuery(BaseModel):
 
 class ProfilingExecutionQuery(BaseModel):
     """Query parameters for listing profiling executions"""
+
     profiling_request_id: Optional[int] = None
     host_name: Optional[str] = None
     status: Optional[ProfilingStatus] = None
     started_after: Optional[datetime] = None
     limit: int = Field(default=100, ge=1, le=1000)
     offset: int = Field(default=0, ge=0)
-
-
-
-

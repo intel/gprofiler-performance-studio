@@ -49,7 +49,9 @@ class S3ProfileDal:
                 )
         # endpoint_url allows connecting to LocalStack or S3-compatible services for testing
         # When None (default), uses standard AWS S3 endpoints
-        self._s3_client = session.client("s3", config=Config(max_pool_connections=50), endpoint_url=config.S3_ENDPOINT_URL)
+        self._s3_client = session.client(
+            "s3", config=Config(max_pool_connections=50), endpoint_url=config.S3_ENDPOINT_URL
+        )
         self._s3_resource = session.resource("s3", endpoint_url=config.S3_ENDPOINT_URL)
 
     @staticmethod

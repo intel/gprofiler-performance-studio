@@ -84,10 +84,14 @@ def get_time_interval_value(start_time: datetime, end_time: datetime, interval: 
 
 def profiling_host_status_params(
     service_name: Optional[List[str]] = Query(None, description="Filter by service name(s)"),
-    exact_match: bool = Query(False, description="Use exact match for service name (default: false for partial matching)"),
+    exact_match: bool = Query(
+        False, description="Use exact match for service name (default: false for partial matching)"
+    ),
     hostname: Optional[List[str]] = Query(None, description="Filter by hostname(s)"),
     ip_address: Optional[List[str]] = Query(None, description="Filter by IP address(es)"),
-    profiling_status: Optional[List[str]] = Query(None, description="Filter by profiling status(es) (e.g., pending, completed, stopped)"),
+    profiling_status: Optional[List[str]] = Query(
+        None, description="Filter by profiling status(es) (e.g., pending, completed, stopped)"
+    ),
     command_type: Optional[List[str]] = Query(None, description="Filter by command type(s) (e.g., start, stop)"),
     pids: Optional[List[int]] = Query(None, description="Filter by PIDs"),
 ) -> ProfilingHostStatusRequest:
@@ -474,8 +478,8 @@ def _create_slack_blocks(profiling_request: ProfilingRequest, request_id: str) -
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"A new request was made to {profiling_request.request_type} a profile and the details are shown below:"
-            }
+                "text": f"A new request was made to {profiling_request.request_type} a profile and the details are shown below:",
+            },
         },
         {
             "type": "section",
@@ -751,7 +755,7 @@ def get_profiling_host_status(
         profiling_statuses=profiling_params.profiling_status,
         command_types=profiling_params.command_type,
         pids=profiling_params.pids,
-        exact_match=profiling_params.exact_match
+        exact_match=profiling_params.exact_match,
     )
 
     # Convert database results to response model

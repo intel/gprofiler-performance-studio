@@ -205,7 +205,7 @@ class CommandCompletionRequest(BaseModel):
 
 class ProfilingHostStatusRequest(BaseModel):
     """Model for profiling host status request parameters"""
-    
+
     service_name: Optional[List[str]] = None
     exact_match: bool = False
     hostname: Optional[List[str]] = None
