@@ -1,16 +1,14 @@
 # About
 An open-source, continuous profiler for production – across any environment, at any scale.
 
-Developed by Intel® Granulate™ and contributed to the open source community, Continuous Profiler is a solution that combines multiple profilers into one view as a flame graph. 
+Developed by Intel® and contributed to the open source community, Continuous Profiler is a solution that combines multiple profilers into one view as a flame graph. 
 This unified view offers developers, performance engineers and DevOps a continuous and autonomous way to identify runtime inefficiencies.
-
-https://granulate.io/continuous-profiling/
 
 # Continuous Profiler
 
 The evolution of Continuous Profiler, Continuous Profiler combines multiple sampling profilers to produce a unified visualization of what a CPU is spending time on. Easy-to-navigate flame graphs pinpoint performance regressions, such as garbage collection, deadlocks and others to help smooth deployments.
 
-The profiler is compatible with Intel Granulate’s continuous optimization services and can be deployed cluster-wide within minutes, supporting a range of programming languages without requiring code changes. 
+The profiler can be deployed cluster-wide within minutes, supporting a range of programming languages without requiring code changes. 
 
 Continuous Profiler is SOC2-certified and held to Intel's high security standards, ensuring reliability and trust in its deployment.
 
@@ -158,7 +156,7 @@ For example,
 that will run a docker installation agent with self-signed certificate
 (that will communicate from docker network to host network):
 ```shell
-docker run --name granulate-gprofiler --restart=always -d --pid=host --userns=host --privileged intel/gprofiler:latest -cu --token="<token from api or ui>" --service-name="my-super-service" --server-host "https://host.docker.internal" --glogger-server "https://host.docker.internal" --no-verify
+docker run --name gprofiler --restart=always -d --pid=host --userns=host --privileged intel/gprofiler:latest -cu --token="<token from api or ui>" --service-name="my-super-service" --server-host "https://host.docker.internal" --glogger-server "https://host.docker.internal" --no-verify
 ```
 
 ### Diagnostics
