@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 from slack_sdk import WebClient  # type: ignore
 from slack_sdk.errors import SlackApiError  # type: ignore
 
-from gprofiler.backend.config import DEFAULT_SLACK_CHANNELS, SLACK_BOT_TOKEN, SLACK_CHANNELS  # type: ignore
+from backend.config import DEFAULT_SLACK_CHANNELS, SLACK_BOT_TOKEN, SLACK_CHANNELS
 
 logger = logging.getLogger(__name__)
 
