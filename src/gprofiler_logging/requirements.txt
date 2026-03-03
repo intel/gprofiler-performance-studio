@@ -19,6 +19,6 @@ fastapi==0.109.0
 uvicorn==0.27.0
 aiofiles==23.2.1
 python-json-logger==2.0.7
-orjson==3.9.15
+orjson==3.11.7
 cachetools==5.3.2
 types-orjson==3.6.2

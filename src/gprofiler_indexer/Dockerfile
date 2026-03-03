@@ -1,4 +1,4 @@
-FROM golang:1.23.8 as build
+FROM golang:1.24.0 AS build
 
 ENV GO111MODULE on
 
@@ -10,7 +10,7 @@ COPY conf src/conf
 
 WORKDIR /go/src
 
-RUN go get -d -v ./...
+RUN go get -v ./...
 RUN go install -v ./...
 RUN go build -v
 

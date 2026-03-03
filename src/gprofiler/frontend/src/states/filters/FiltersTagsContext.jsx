@@ -149,7 +149,7 @@ const reducer = (state, action) => {
                     [operation]: rules2.map((rule, ruleIndex) => {
                         if (ruleIndex === index) {
                             const [, subItem] = Object.entries(rule)[0];
-                            // eslint-disable-next-line no-unused-vars
+
                             const [equal, value] = Object.entries(subItem)[0];
                             return { [payload]: { [equal]: '' } };
                         }
