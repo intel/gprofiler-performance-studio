@@ -34,6 +34,10 @@ const ProfilingTopPanel = ({
     onProfilingFrequencyChange,
     maxProcesses,
     onMaxProcessesChange,
+    profilingMode,
+    onProfilingModeChange,
+    duration,
+    onDurationChange,
     profilerConfigs,
     onProfilerConfigsChange,
 }) => {
@@ -264,6 +268,83 @@ const ProfilingTopPanel = ({
                                 />
                                 <Typography variant='body2' sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
                                     procs
+                                </Typography>
+                            </Box>
+                        </Tooltip>
+                    </Flexbox>
+
+                    {/* Profiling Mode and Duration Section */}
+                    <Flexbox alignItems='center' spacing={2}>
+                        {/* Profiling Mode Radio Buttons */}
+                        <Tooltip title='Select profiling mode: Continuous for ongoing profiling (60s fixed), or Ad Hoc for one-time profiling with custom duration'>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                <Typography variant='body2' sx={{ fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                                    Mode:
+                                </Typography>
+                                <RadioGroup
+                                    row
+                                    value={profilingMode}
+                                    onChange={(e) => onProfilingModeChange(e.target.value)}
+                                    sx={{ gap: 1, ml: 1 }}>
+                                    <FormControlLabel
+                                        value='continuous'
+                                        control={<Radio size='small' />}
+                                        label={
+                                            <Typography variant='body2' sx={{ fontSize: '0.875rem' }}>
+                                                Continuous
+                                            </Typography>
+                                        }
+                                    />
+                                    <FormControlLabel
+                                        value='adhoc'
+                                        control={<Radio size='small' />}
+                                        label={
+                                            <Typography variant='body2' sx={{ fontSize: '0.875rem' }}>
+                                                Ad Hoc
+                                            </Typography>
+                                        }
+                                    />
+                                </RadioGroup>
+                            </Box>
+                        </Tooltip>
+
+                        {/* Duration Field */}
+                        <Tooltip
+                            title={
+                                profilingMode === 'continuous'
+                                    ? 'Duration is fixed at 60 seconds for Continuous mode'
+                                    : 'Profiling duration in seconds (only editable in Ad Hoc mode)'
+                            }>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant='body2' sx={{ fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                                    Duration:
+                                </Typography>
+                                <TextField
+                                    value={profilingMode === 'continuous' ? 60 : duration}
+                                    onChange={(e) => {
+                                        const value = parseInt(e.target.value, 10);
+                                        if (!isNaN(value) && value > 0 && value <= 3600) {
+                                            onDurationChange(value);
+                                        }
+                                    }}
+                                    type='number'
+                                    size='small'
+                                    disabled={profilingMode === 'continuous'}
+                                    inputProps={{
+                                        min: 1,
+                                        max: 3600,
+                                        style: { textAlign: 'center' },
+                                    }}
+                                    sx={{
+                                        width: '70px',
+                                        '& .MuiOutlinedInput-root': {
+                                            height: '32px',
+                                            fontSize: '0.875rem',
+                                        },
+                                    }}
+                                />
+                                <Typography variant='body2' sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                                    sec
                                 </Typography>
                             </Box>
                         </Tooltip>

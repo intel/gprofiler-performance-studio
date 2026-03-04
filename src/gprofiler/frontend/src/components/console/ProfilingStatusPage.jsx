@@ -122,6 +122,12 @@ const ProfilingStatusPage = () => {
     // Max processes state
     const [maxProcesses, setMaxProcesses] = useState(10);
 
+    // Profiling mode state (Ad Hoc vs Continuous)
+    const [profilingMode, setProfilingMode] = useState('continuous'); // 'adhoc' or 'continuous'
+
+    // Duration state
+    const [duration, setDuration] = useState(60);
+
     // Profiler configurations state
     const [profilerConfigs, setProfilerConfigs] = useState({
         perf: 'enabled_restricted', // 'enabled_restricted', 'enabled_aggressive', 'disabled'
@@ -358,8 +364,8 @@ const ProfilingStatusPage = () => {
             const submitData = {
                 service_name: serviceName,
                 request_type: action,
-                continuous: true,
-                duration: 60, // Default duration, can't be adjusted yet
+                continuous: profilingMode === 'continuous',
+                duration: profilingMode === 'continuous' ? 60 : duration,
                 frequency: profilingFrequency, // Use frequency from UI
                 profiling_mode: 'cpu', // Default profiling mode, can't be adjusted yet
                 target_hosts: target_host,
@@ -427,6 +433,10 @@ const ProfilingStatusPage = () => {
                     onProfilingFrequencyChange={setProfilingFrequency}
                     maxProcesses={maxProcesses}
                     onMaxProcessesChange={setMaxProcesses}
+                    profilingMode={profilingMode}
+                    onProfilingModeChange={setProfilingMode}
+                    duration={duration}
+                    onDurationChange={setDuration}
                     profilerConfigs={profilerConfigs}
                     onProfilerConfigsChange={setProfilerConfigs}
                 />
@@ -498,13 +508,17 @@ const ProfilingStatusPage = () => {
                                     <Typography variant='body2' sx={{ fontWeight: 500, mb: 1 }}>
                                         Basic Settings:
                                     </Typography>
+                                    <Typography variant='body2'>
+                                        • Mode: {profilingMode === 'continuous' ? 'Continuous' : 'Ad Hoc'}
+                                    </Typography>
+                                    <Typography variant='body2'>
+                                        • Duration: {profilingMode === 'continuous' ? 60 : duration} seconds
+                                    </Typography>
                                     <Typography variant='body2'>• Frequency: {profilingFrequency} Hz</Typography>
                                     <Typography variant='body2'>• Max Processes: {maxProcesses}</Typography>
                                     <Typography variant='body2'>
                                         • PerfSpect HW Metrics: {enablePerfSpect ? 'Enabled' : 'Disabled'}
                                     </Typography>
-                                    <Typography variant='body2'>• Duration: 60 seconds</Typography>
-                                    <Typography variant='body2'>• Mode: CPU profiling</Typography>
                                 </Box>
 
                                 {/* Profiler Settings */}
