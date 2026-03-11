@@ -37,6 +37,9 @@ const ProfilesViewsWrapper = () => {
     const { viewMode } = useContext(SelectorsContext);
     const isTableView = viewMode === PROFILES_VIEWS.table;
     const isFlameGraphView = viewMode === PROFILES_VIEWS.flamegraph;
+    const isAdhocView = viewMode === PROFILES_VIEWS.adhoc;
+    // Adhoc view doesn't depend on flamegraph data
+    const shouldDisplayView = isFgDisplayed || isAdhocView;
     return (
         <FgHoverContextProvider>
             <ErrorBoundary FallbackComponent={ErrorFallback}>
@@ -44,13 +47,13 @@ const ProfilesViewsWrapper = () => {
                     <Box sx={{ p: isTableView ? 0 : 4, height: '100%' }}>
                         <div
                             style={{
-                                display: isFgDisplayed ? 'inherit' : 'none',
+                                display: shouldDisplayView ? 'inherit' : 'none',
                                 overflow: 'hidden',
                                 width: '100%',
                                 height: isFullScreen ? '90vh' : isFlameGraphView ? 'calc(100vh - 200px)' : 'auto',
                                 maxHeight: isFullScreen ? '90vh' : isFlameGraphView ? 'calc(100vh - 200px)' : 'auto',
                             }}>
-                            {isFgDisplayed && <ProfilesViews />}
+                            {shouldDisplayView && <ProfilesViews />}
                         </div>
                         {isFlameGraphView && (
                             <Box

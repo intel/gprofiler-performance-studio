@@ -851,26 +851,37 @@ class DBManager(metaclass=Singleton):
         ip_address: str,
         service_name: str,
         last_command_id: Optional[str] = None,
+        received_command_ids: Optional[List[str]] = None,
+        executed_command_ids: Optional[List[str]] = None,
         status: str = "active",
         heartbeat_timestamp: Optional[datetime] = None,
     ) -> bool:
-        """Update or insert host heartbeat information using pure SQL"""
+        """
+        Update or insert host heartbeat information using pure SQL.
+        Always updates on conflict to ensure latest data is stored, including
+        hardware changes (e.g., new PMU events after CPU upgrade).
+        """
         if heartbeat_timestamp is None:
             heartbeat_timestamp = datetime.now()
 
         query = """
         INSERT INTO HostHeartbeats (
             hostname, ip_address, service_name, last_command_id,
+            received_command_ids, executed_command_ids,
             status, heartbeat_timestamp, created_at, updated_at
         ) VALUES (
             %(hostname)s, %(ip_address)s::inet, %(service_name)s,
-            %(last_command_id)s::uuid, %(status)s::HostStatus,
+            %(last_command_id)s::uuid, %(received_command_ids)s::uuid[],
+            %(executed_command_ids)s::uuid[],
+            %(status)s::HostStatus,
             %(heartbeat_timestamp)s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         )
         ON CONFLICT (hostname, service_name)
         DO UPDATE SET
             ip_address = EXCLUDED.ip_address,
             last_command_id = EXCLUDED.last_command_id,
+            received_command_ids = EXCLUDED.received_command_ids,
+            executed_command_ids = EXCLUDED.executed_command_ids,
             status = EXCLUDED.status,
             heartbeat_timestamp = EXCLUDED.heartbeat_timestamp,
             updated_at = CURRENT_TIMESTAMP
@@ -881,6 +892,8 @@ class DBManager(metaclass=Singleton):
             "ip_address": ip_address,
             "service_name": service_name,
             "last_command_id": last_command_id,
+            "received_command_ids": received_command_ids,
+            "executed_command_ids": executed_command_ids,
             "status": status,
             "heartbeat_timestamp": heartbeat_timestamp,
         }
@@ -1784,3 +1797,68 @@ class DBManager(metaclass=Singleton):
             combined_config.update(merged_additional_args)  # Merge directly into combined_config
 
         return combined_config
+
+    def get_adhoc_flamegraphs_metadata(
+        self,
+        service_id: int,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        hostname_filters: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve adhoc flamegraph metadata with optional filters.
+
+        Args:
+            service_id: ID of the service
+            start_time: Optional filter for profiles after this time
+            end_time: Optional filter for profiles before this time
+            hostname_filters: Optional list of hostnames to filter by
+
+        Returns:
+            List of metadata dictionaries containing s3_key, hostname, perf_events, and start_time
+        """
+        conditions = ["service_id = %s"]
+        params: List[Any] = [service_id]
+
+        if start_time:
+            conditions.append("start_time >= %s")
+            params.append(start_time)
+
+        if end_time:
+            conditions.append("end_time <= %s")
+            params.append(end_time)
+
+        if hostname_filters:
+            placeholders = ", ".join(["%s"] * len(hostname_filters))
+            conditions.append(f"hostname IN ({placeholders})")
+            params.extend(hostname_filters)
+
+        where_clause = " AND ".join(conditions)
+
+        query = f"""
+            SELECT
+                s3_key,
+                hostname,
+                perf_events,
+                start_time,
+                file_size
+            FROM AdhocFlamegraphMetadata
+            WHERE {where_clause}
+            ORDER BY start_time DESC
+        """
+
+        results = self.db.execute(query, tuple(params), one_value=False, fetch_all=True)
+
+        if not results:
+            return []
+
+        return [
+            {
+                "s3_key": row[0],
+                "hostname": row[1],
+                "perf_events": row[2] if row[2] else [],
+                "start_time": row[3].isoformat() if row[3] else None,
+                "file_size": row[4] if len(row) > 4 else None,
+            }
+            for row in results
+        ]

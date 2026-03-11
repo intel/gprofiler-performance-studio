@@ -6,6 +6,7 @@ toolchain go1.24.0
 
 require (
 	github.com/aws/aws-sdk-go v1.55.6
+	github.com/lib/pq v1.10.9
 	github.com/sirupsen/logrus v1.9.3
 	go.uber.org/zap v1.27.0
 )

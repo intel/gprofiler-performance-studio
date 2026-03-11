@@ -30,6 +30,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Profiling type constants
+const (
+	ProfilingTypeAdhoc      = "adhoc"
+	ProfilingTypeContinuous = "continuous"
+)
+
 type FrameValuesMap map[string]map[string]FrameValue
 
 type FrameValue struct {
@@ -44,17 +50,21 @@ type Frame struct {
 
 type FileInfo struct {
 	Metadata struct {
-		Hostname  string `json:"hostname"`
-		CloudInfo struct {
+		Hostname   string `json:"hostname"`
+		Continuous bool   `json:"continuous"`
+		CloudInfo  struct {
 			InstanceType string `json:"instance_type"`
 		} `json:"cloud_info"`
 		RunArguments struct {
 			ServiceName       string `json:"service_name"`
 			ProfileApiVersion string `json:"profile_api_version"`
+			PerfEvents        string `json:"perf_events"`
+			PerfMode          string `json:"perf_mode"`
 		} `json:"run_arguments"`
 	} `json:"metadata"`
-	HTMLBlob string `json:"htmlblob"`
-	Metrics  struct {
+	HTMLBlob       string `json:"htmlblob"`
+	FlamegraphHTML string `json:"flamegraph_html"`
+	Metrics        struct {
 		CPUAvg    float64 `json:"cpu_avg"`
 		MemoryAvg float64 `json:"mem_avg"`
 	} `json:"metrics"`
@@ -293,10 +303,84 @@ func (pw *ProfilesWriter) ParseStackFrameFile(sess *session.Session, task SQSMes
 		}
 	}
 
-	// DEBUG: Log the condition values
-	log.Debugf("DEBUG: hostname=%s, htmlBlobPath='%s', CPUAvg=%f, MemoryAvg=%f", 
+	// Save flamegraph HTML if present (dedicated flamegraph HTML separate from the stack blob)
+	if fileInfo.FlamegraphHTML != "" {
+		baseFileName := strings.TrimSuffix(task.Filename, ".gz")
+
+		// Replace hostname hash with actual hostname in the filename
+		// Format: <start_time_iso_format>_<random_suffix>_<hostname_hash> -> <start_time_iso_format>_<random_suffix>_<hostname>
+		parts := strings.Split(baseFileName, "_")
+		if len(parts) >= 3 {
+			// Replace the last part (hostname hash) with actual hostname
+			parts[len(parts)-1] = fileInfo.Metadata.Hostname
+			baseFileName = strings.Join(parts, "_")
+		}
+
+		// Determine profiling type based on metadata.continuous
+		profilingType := ProfilingTypeAdhoc
+		if fileInfo.Metadata.Continuous {
+			profilingType = ProfilingTypeContinuous
+		}
+
+		flamegraphHTMLPath := fmt.Sprintf("products/%s/stacks/flamegraph/%s_%s_flamegraph.html", task.Service, baseFileName, profilingType)
+
+		var flamegraphData []byte
+		// Try to decode as base64, if it fails, treat it as plain HTML
+		decodedFlamegraph, err := base64.StdEncoding.DecodeString(fileInfo.FlamegraphHTML)
+		if err != nil {
+			log.Warnf("flamegraph HTML for file %s is not base64-encoded, treating as plain HTML", task.Filename)
+			flamegraphData = []byte(fileInfo.FlamegraphHTML)
+		} else {
+			flamegraphData = decodedFlamegraph
+		}
+
+		err = PutFileToS3(sess, s3bucket, flamegraphHTMLPath, flamegraphData)
+		if err != nil {
+			log.Errorf("failed to upload flamegraph HTML for file %s: %v", task.Filename, err)
+		} else {
+			log.Infof("successfully uploaded flamegraph HTML to %s", flamegraphHTMLPath)
+
+			// Store metadata in PostgreSQL for all adhoc profiles
+			if profilingType == ProfilingTypeAdhoc {
+				// Extract perf_events from profile metadata only if perf_mode is enabled
+				var perfEvents []string
+				perfMode := fileInfo.Metadata.RunArguments.PerfMode
+				if perfMode != "disabled" {
+					perfEventsStr := fileInfo.Metadata.RunArguments.PerfEvents
+					if perfEventsStr != "" {
+						// Split comma-separated string into array
+						for _, event := range strings.Split(perfEventsStr, ",") {
+							trimmed := strings.TrimSpace(event)
+							if trimmed != "" {
+								perfEvents = append(perfEvents, trimmed)
+							}
+						}
+					}
+				}
+
+				// Store metadata for all adhoc profiles (perf_events will be empty array if perf_mode is not enabled)
+				err = StoreAdhocFlamegraphMetadata(
+					task.ServiceId,
+					fileInfo.Metadata.Hostname,
+					flamegraphHTMLPath,
+					perfEvents,
+					timestamp,
+					int64(len(flamegraphData)),
+				)
+				if err != nil {
+					log.Errorf("failed to store flamegraph metadata for %s: %v", flamegraphHTMLPath, err)
+					// Don't fail the entire operation if metadata storage fails
+				} else {
+					log.Infof("successfully stored metadata for %s with events: %v",
+						flamegraphHTMLPath, perfEvents)
+				}
+			}
+		}
+	}
+
+	log.Debugf("DEBUG: hostname=%s, htmlBlobPath='%s', CPUAvg=%f, MemoryAvg=%f",
 		fileInfo.Metadata.Hostname, htmlBlobPath, fileInfo.Metrics.CPUAvg, fileInfo.Metrics.MemoryAvg)
-	
+
 	if htmlBlobPath != "" || (fileInfo.Metrics.CPUAvg != 0 && fileInfo.Metrics.MemoryAvg != 0) {
 		log.Debugf("DEBUG: Writing metrics for hostname=%s", fileInfo.Metadata.Hostname)
 		pw.writeMetrics(uint32(serviceId), fileInfo.Metadata.CloudInfo.InstanceType,

@@ -54,3 +54,27 @@ def get_rql_only_for_one_key(rql_filter: Optional[RQLFilter], key: FilterTypes) 
                     else:
                         new_rql_filter.filter[log_op] = [filter_type]
     return new_rql_filter
+
+
+def get_rql_all_eq_values(rql_filter: Optional[RQLFilter], key: FilterTypes) -> List[str]:
+    """
+    Extract all values for a given key with equality comparison operator from RQL filter.
+
+    Args:
+        rql_filter: The RQL filter object
+        key: The filter type key to extract values for
+
+    Returns:
+        List of all values found for the key with eq operator
+    """
+    if rql_filter is None:
+        return []
+
+    values = []
+    for log_op in rql_filter.filter.values():
+        for filter_type in log_op:
+            if key.value in filter_type:
+                if RQLCompareOperators.eq_op in filter_type[key]:
+                    values.append(filter_type[key][RQLCompareOperators.eq_op])
+
+    return values

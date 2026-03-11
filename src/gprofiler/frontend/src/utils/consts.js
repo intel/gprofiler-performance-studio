@@ -87,6 +87,7 @@ export const PROFILES_VIEWS = {
     table: 'table',
     service: 'service',
     html: 'html',
+    adhoc: 'adhoc',
 };
 
 export const SPLIT_VIEW_ANIMATION_DURATION_IN_SECONDS = 0.7;

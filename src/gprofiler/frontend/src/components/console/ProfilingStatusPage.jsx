@@ -20,6 +20,22 @@ import PageHeader from '../common/layout/PageHeader';
 import ProfilingHeader from './header/ProfilingHeader';
 import ProfilingTopPanel from './header/ProfilingTopPanel';
 
+// Helper function to build profile URL
+const buildProfileUrl = (host, service, view) => {
+    const baseUrl = `${window.location.protocol}//${window.location.host}`;
+    const params = new URLSearchParams({
+        filter: `hn,is,${host}`,
+        gtab: '1',
+        pm: '1',
+        rtms: '1',
+        service: service,
+        time: '1h',
+        view: view,
+        wp: '100',
+    });
+    return `${baseUrl}${PAGES.profiles.to}?${params.toString()}`;
+};
+
 const columns = [
     { field: 'service', headerName: 'service name', flex: 1, sortable: true },
     { field: 'host', headerName: 'host name', flex: 1, sortable: true },
@@ -72,21 +88,30 @@ const columns = [
 
             if (!host || !service) return '';
 
-            const baseUrl = `${window.location.protocol}//${window.location.host}`;
-            const profileUrl = `${baseUrl}${PAGES.profiles.to}?filter=hn,is,${encodeURIComponent(
-                host
-            )}&gtab=1&pm=1&rtms=1&service=${encodeURIComponent(service)}&time=1h&view=flamegraph&wp=100`;
+            const continuousProfileUrl = buildProfileUrl(host, service, 'flamegraph');
+            const adhocProfileUrl = buildProfileUrl(host, service, 'adhoc');
 
             return (
-                <a
-                    href={profileUrl}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    style={{ color: '#1976d2', textDecoration: 'none' }}
-                    onMouseOver={(e) => (e.target.style.textDecoration = 'underline')}
-                    onMouseOut={(e) => (e.target.style.textDecoration = 'none')}>
-                    View Profile
-                </a>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                    <a
+                        href={continuousProfileUrl}
+                        target='_blank'
+                        rel='noopener noreferrer'
+                        style={{ color: '#1976d2', textDecoration: 'none', fontSize: '0.875rem' }}
+                        onMouseOver={(e) => (e.target.style.textDecoration = 'underline')}
+                        onMouseOut={(e) => (e.target.style.textDecoration = 'none')}>
+                        View Continuous Profile
+                    </a>
+                    <a
+                        href={adhocProfileUrl}
+                        target='_blank'
+                        rel='noopener noreferrer'
+                        style={{ color: '#1976d2', textDecoration: 'none', fontSize: '0.875rem' }}
+                        onMouseOver={(e) => (e.target.style.textDecoration = 'underline')}
+                        onMouseOut={(e) => (e.target.style.textDecoration = 'none')}>
+                        View Adhoc Profile
+                    </a>
+                </Box>
             );
         },
     },

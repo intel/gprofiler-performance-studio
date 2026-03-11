@@ -76,6 +76,11 @@ DROP INDEX IF EXISTS idx_profilingrequests_status;
 DROP INDEX IF EXISTS idx_profilingrequests_service_name;
 DROP INDEX IF EXISTS idx_profilingrequests_request_id;
 
+-- AdhocFlamegraphMetadata indexes
+DROP INDEX IF EXISTS idx_adhoc_metadata_service_time;
+DROP INDEX IF EXISTS idx_adhoc_metadata_s3_key;
+DROP INDEX IF EXISTS idx_adhoc_metadata_hostname;
+
 -- HostHeartbeats indexes
 DROP INDEX IF EXISTS idx_hostheartbeats_heartbeat_timestamp;
 DROP INDEX IF EXISTS idx_hostheartbeats_status;
@@ -87,7 +92,10 @@ DROP INDEX IF EXISTS idx_hostheartbeats_hostname;
 -- STEP 3: Drop Tables (in correct order for foreign keys)
 -- ============================================================
 
--- Drop ProfilingExecutions first (has FK to ProfilingRequests)
+-- Drop AdhocFlamegraphMetadata first (has FK to Services)
+DROP TABLE IF EXISTS AdhocFlamegraphMetadata CASCADE;
+
+-- Drop ProfilingExecutions (has FK to ProfilingRequests)
 DROP TABLE IF EXISTS ProfilingExecutions CASCADE;
 
 -- Drop ProfilingCommands (no dependencies)
