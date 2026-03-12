@@ -20,8 +20,8 @@ import _ from 'lodash';
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import useGetFgMetrics from '@/api/hooks/useGetFgMetrics';
-import HtmlView from '@/components/profiles/views/htmlView/HtmlView';
 import AdhocProfilingView from '@/components/profiles/views/adhoc/AdhocProfilingView';
+import HtmlView from '@/components/profiles/views/htmlView/HtmlView';
 
 import {
     countZoomedSearchMatches,
@@ -171,7 +171,12 @@ const ProfilesViews = () => {
     useEffect(() => {
         // Only update isFGEmpty for views that depend on flamegraph data
         // Adhoc view doesn't depend on flamegraph data and manages its own empty state
-        const viewsDependingOnFgData = [PROFILES_VIEWS.flamegraph, PROFILES_VIEWS.table, PROFILES_VIEWS.service, PROFILES_VIEWS.html];
+        const viewsDependingOnFgData = [
+            PROFILES_VIEWS.flamegraph,
+            PROFILES_VIEWS.table,
+            PROFILES_VIEWS.service,
+            PROFILES_VIEWS.html,
+        ];
         if (viewsDependingOnFgData.includes(viewMode)) {
             if (!_.isEmpty(flameGraphData[0]) && flameGraphData[0]?.children?.length === 0) {
                 setIsFGEmpty(true);

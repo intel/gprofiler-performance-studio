@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import { useContext, useEffect, useState } from 'react';
 import {
     Box,
     Button,
@@ -34,16 +33,18 @@ import {
     TableRow,
     Typography,
 } from '@mui/material';
-import { SelectorsContext } from '@/states';
-import { FilterTagsContext } from '@/states/filters/FiltersTagsContext';
-import useFetchWithRequest from '@/api/useFetchWithRequest';
-import { DATA_URLS } from '@/api/urls';
-import { stringify } from 'query-string';
-import { getStartEndDateTimeFromSelection } from '@/api/utils';
 import { format } from 'date-fns';
-import Flexbox from '@/components/common/layout/Flexbox';
+import { stringify } from 'query-string';
+import { useContext, useEffect, useState } from 'react';
+
+import { DATA_URLS } from '@/api/urls';
+import useFetchWithRequest from '@/api/useFetchWithRequest';
+import { getStartEndDateTimeFromSelection } from '@/api/utils';
 import Icon from '@/components/common/icon/Icon';
 import { ICONS_NAMES } from '@/components/common/icon/iconsData';
+import Flexbox from '@/components/common/layout/Flexbox';
+import { SelectorsContext } from '@/states';
+import { FilterTagsContext } from '@/states/filters/FiltersTagsContext';
 
 const AdhocProfilingView = () => {
     const { selectedService, timeSelection, selectedHost } = useContext(SelectorsContext);
@@ -54,7 +55,12 @@ const AdhocProfilingView = () => {
 
     const timeParams = getStartEndDateTimeFromSelection(timeSelection);
 
-    const { data: filesData, loading: filesLoading, error: filesError, run: fetchFiles } = useFetchWithRequest(
+    const {
+        data: filesData,
+        loading: filesLoading,
+        error: filesError,
+        run: fetchFiles,
+    } = useFetchWithRequest(
         {
             url: `${DATA_URLS.GET_ADHOC_FLAMEGRAPHS}?${stringify({
                 serviceName: selectedService,
@@ -65,7 +71,12 @@ const AdhocProfilingView = () => {
         { manual: true }
     );
 
-    const { data: fileContent, loading: contentLoading, error: contentError, run: fetchFileContent } = useFetchWithRequest(
+    const {
+        data: fileContent,
+        loading: contentLoading,
+        error: contentError,
+        run: fetchFileContent,
+    } = useFetchWithRequest(
         {
             url: `${DATA_URLS.GET_ADHOC_FLAMEGRAPH_CONTENT}?${stringify({
                 serviceName: selectedService,
@@ -115,7 +126,7 @@ const AdhocProfilingView = () => {
     }
 
     if (filesError) {
-        return <Typography color="error">Error loading adhoc flamegraphs: {filesError.message}</Typography>;
+        return <Typography color='error'>Error loading adhoc flamegraphs: {filesError.message}</Typography>;
     }
 
     return (
@@ -133,20 +144,21 @@ const AdhocProfilingView = () => {
                     '&:hover': filesData && filesData.length > 0 ? { backgroundColor: 'grey.200' } : {},
                 }}
                 onClick={() => filesData && filesData.length > 0 && setIsTableExpanded(!isTableExpanded)}>
-                <Typography variant="h6">Adhoc Profiling</Typography>
+                <Typography variant='h6'>Adhoc Profiling</Typography>
                 {filesData && filesData.length > 0 && (
                     <>
                         <FormControl sx={{ minWidth: 200 }}>
-                            <InputLabel id="select-file-label">Select Flamegraph File</InputLabel>
+                            <InputLabel id='select-file-label'>Select Flamegraph File</InputLabel>
                             <Select
-                                labelId="select-file-label"
+                                labelId='select-file-label'
                                 value={selectedFile?.filename || ''}
-                                label="Select Flamegraph File"
+                                label='Select Flamegraph File'
                                 onChange={handleFileSelect}
                                 onClick={(e) => e.stopPropagation()}>
                                 {filesData.map((file) => (
                                     <MenuItem key={file.filename} value={file.filename} disabled={file.removed}>
-                                        {format(new Date(file.timestamp), 'yyyy-MM-dd HH:mm:ss')} - {file.hostname || 'N/A'}
+                                        {format(new Date(file.timestamp), 'yyyy-MM-dd HH:mm:ss')} -{' '}
+                                        {file.hostname || 'N/A'}
                                         {file.removed && ' (removed)'}
                                     </MenuItem>
                                 ))}
@@ -160,10 +172,17 @@ const AdhocProfilingView = () => {
             </Box>
 
             {filesData && filesData.length > 0 ? (
-                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 2, height: 'calc(100vh - 300px)' }}>
+                <Box
+                    sx={{
+                        flexGrow: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 2,
+                        height: 'calc(100vh - 300px)',
+                    }}>
                     <Collapse in={isTableExpanded}>
                         <TableContainer component={Paper} sx={{ maxHeight: 300, overflowY: 'auto', flexShrink: 0 }}>
-                            <Table stickyHeader size="small">
+                            <Table stickyHeader size='small'>
                                 <TableHead>
                                     <TableRow>
                                         <TableCell>Timestamp</TableCell>
@@ -201,10 +220,15 @@ const AdhocProfilingView = () => {
                                                 </TableCell>
                                                 <TableCell>
                                                     {file.removed ? (
-                                                        <Chip label="Removed" size="small" color="error" variant="outlined" />
+                                                        <Chip
+                                                            label='Removed'
+                                                            size='small'
+                                                            color='error'
+                                                            variant='outlined'
+                                                        />
                                                     ) : (
                                                         <Button
-                                                            size="small"
+                                                            size='small'
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 handleRowClick(file);
@@ -223,7 +247,7 @@ const AdhocProfilingView = () => {
 
                     {contentLoading && <Typography>Loading flamegraph content...</Typography>}
                     {contentError && (
-                        <Typography color="error">Error loading flamegraph content: {contentError.message}</Typography>
+                        <Typography color='error'>Error loading flamegraph content: {contentError.message}</Typography>
                     )}
                     {selectedFileContent ? (
                         <Box
@@ -239,9 +263,9 @@ const AdhocProfilingView = () => {
                             }}>
                             <iframe
                                 style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
-                                title="Adhoc Flamegraph"
+                                title='Adhoc Flamegraph'
                                 srcDoc={selectedFileContent}
-                                sandbox="allow-scripts allow-same-origin"
+                                sandbox='allow-scripts allow-same-origin'
                             />
                         </Box>
                     ) : selectedFile && !contentLoading && !contentError ? (
