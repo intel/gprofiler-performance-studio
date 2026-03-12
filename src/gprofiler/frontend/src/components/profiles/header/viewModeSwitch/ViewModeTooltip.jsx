@@ -48,6 +48,11 @@ const viewModes = {
         description: 'The latest HTML of your gProfiler service and hostname',
         icon: ICONS_NAMES.LastHtmlView,
     },
+    [PROFILES_VIEWS.adhoc]: {
+        label: 'Adhoc profiling',
+        description: 'Browse and view pre-generated flamegraph HTML files from S3 storage',
+        icon: ICONS_NAMES.FlameGraphView,
+    },
 };
 
 const TooltipContent = ({ viewMode }) => {

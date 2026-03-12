@@ -20,6 +20,7 @@ import _ from 'lodash';
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import useGetFgMetrics from '@/api/hooks/useGetFgMetrics';
+import AdhocProfilingView from '@/components/profiles/views/adhoc/AdhocProfilingView';
 import HtmlView from '@/components/profiles/views/htmlView/HtmlView';
 
 import {
@@ -168,12 +169,22 @@ const ProfilesViews = () => {
     }, [searchedData, framesSelected]);
 
     useEffect(() => {
-        if (!_.isEmpty(flameGraphData[0]) && flameGraphData[0]?.children?.length === 0) {
-            setIsFGEmpty(true);
-        } else {
-            setIsFGEmpty(false);
+        // Only update isFGEmpty for views that depend on flamegraph data
+        // Adhoc view doesn't depend on flamegraph data and manages its own empty state
+        const viewsDependingOnFgData = [
+            PROFILES_VIEWS.flamegraph,
+            PROFILES_VIEWS.table,
+            PROFILES_VIEWS.service,
+            PROFILES_VIEWS.html,
+        ];
+        if (viewsDependingOnFgData.includes(viewMode)) {
+            if (!_.isEmpty(flameGraphData[0]) && flameGraphData[0]?.children?.length === 0) {
+                setIsFGEmpty(true);
+            } else {
+                setIsFGEmpty(false);
+            }
         }
-    }, [flameGraphData, setIsFGEmpty]);
+    }, [flameGraphData, setIsFGEmpty, viewMode]);
 
     useEffect(() => {
         if (searchValue) {
@@ -241,6 +252,12 @@ const ProfilesViews = () => {
         },
         [setHoverData, searchedData]
     );
+
+    // Always render adhoc view when selected, regardless of isFGEmpty state
+    // since adhoc view has its own empty state handling
+    if (viewMode === PROFILES_VIEWS.adhoc) {
+        return <AdhocProfilingView />;
+    }
 
     return viewMode === PROFILES_VIEWS.service ? (
         <ServiceView />

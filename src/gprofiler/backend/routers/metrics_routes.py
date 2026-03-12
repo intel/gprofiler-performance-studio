@@ -41,7 +41,7 @@ from backend.models.metrics_models import (
     ProfilingResponse,
     SampleCount,
 )
-from backend.utils.filters_utils import get_rql_first_eq_key, get_rql_only_for_one_key
+from backend.utils.filters_utils import get_rql_all_eq_values, get_rql_first_eq_key, get_rql_only_for_one_key
 from backend.utils.notifications import SlackNotifier
 from backend.utils.request_utils import flamegraph_base_request_params, get_metrics_response, get_query_response
 from botocore.exceptions import ClientError
@@ -49,9 +49,26 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from gprofiler_dev import S3ProfileDal
 from gprofiler_dev.postgres.db_manager import DBManager
+from pydantic import BaseModel
 
 logger = getLogger(__name__)
 router = APIRouter()
+
+
+# Adhoc profiling models
+class FlamegraphFile(BaseModel):
+    filename: str
+    timestamp: datetime
+    hostname: Optional[str] = None
+    size: Optional[int] = None
+    s3_path: str
+    perf_events: Optional[List[str]] = None
+    removed: bool = False
+
+
+class FlamegraphContent(BaseModel):
+    content: str
+    filename: str
 
 
 def get_time_interval_value(start_time: datetime, end_time: datetime, interval: str) -> str:
@@ -545,6 +562,8 @@ def receive_heartbeat(heartbeat: HeartbeatRequest):
                 ip_address=heartbeat.ip_address,
                 service_name=heartbeat.service_name,
                 last_command_id=heartbeat.last_command_id,
+                received_command_ids=heartbeat.received_command_ids,
+                executed_command_ids=heartbeat.executed_command_ids,
                 status=heartbeat.status,
                 heartbeat_timestamp=heartbeat.timestamp,
             )
@@ -795,3 +814,97 @@ def get_profiling_host_status(
         )
 
     return results
+
+
+@router.get("/adhoc_flamegraphs", response_model=List[FlamegraphFile])
+def get_adhoc_flamegraphs(
+    fg_params: FGParamsBaseModel = Depends(flamegraph_base_request_params),
+):
+    """
+    Get list of available adhoc flamegraph files for the given service and time range.
+    Retrieves metadata from the database which is populated by the indexer after successful
+    flamegraph HTML creation. Supports filtering by hostname(s) and time range.
+    """
+    try:
+        db_manager = DBManager()
+        service_name = fg_params.service_name
+
+        # Get service_id for metadata query
+        service_id = db_manager.get_service(service_name)
+
+        # Extract hostname filters from fg_params if present
+        hostname_filters = get_rql_all_eq_values(fg_params.filter, FilterTypes.HOSTNAME_KEY)
+
+        # Get metadata from database (already filtered by service, time, and hostname)
+        metadata_list = db_manager.get_adhoc_flamegraphs_metadata(
+            service_id=service_id,
+            start_time=fg_params.start_time,
+            end_time=fg_params.end_time,
+            hostname_filters=hostname_filters,
+        )
+
+        # Convert metadata to FlamegraphFile objects
+        flamegraph_files = []
+        for metadata in metadata_list:
+            s3_key = metadata["s3_key"]
+            filename = s3_key.split("/")[-1]
+
+            flamegraph_files.append(
+                FlamegraphFile(
+                    filename=filename,
+                    timestamp=datetime.fromisoformat(metadata["start_time"]),
+                    hostname=metadata["hostname"],
+                    size=metadata.get("file_size"),
+                    s3_path=s3_key,
+                    perf_events=metadata.get("perf_events"),
+                )
+            )
+
+        # Mark entries whose S3 file no longer exists.
+        # All head_object calls are issued in parallel (one thread per key)
+        # so the total latency is ~one S3 round-trip regardless of list size.
+        if flamegraph_files:
+            s3_dal = S3ProfileDal(logger)
+            all_s3_paths = [f.s3_path for f in flamegraph_files]
+            existing_keys = s3_dal.check_keys_exist(all_s3_paths)
+            for f in flamegraph_files:
+                f.removed = f.s3_path not in existing_keys
+
+        return flamegraph_files
+
+    except Exception as e:
+        logger.error(f"Error fetching adhoc flamegraphs: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch adhoc flamegraph files")
+
+
+@router.get("/adhoc_flamegraph_content", response_model=FlamegraphContent)
+def get_adhoc_flamegraph_content(
+    filename: str = Query(..., description="Flamegraph filename to fetch"),
+    service_name: str = Query(..., alias="serviceName"),
+    fg_filter: Optional[str] = Query(None, alias="filter"),
+):
+    """
+    Get the content of a specific adhoc flamegraph HTML file from S3.
+    """
+    try:
+        s3_dal = S3ProfileDal(logger)
+
+        # Build full S3 path for flamegraph HTML files
+        s3_path = f"products/{service_name}/stacks/flamegraph/{filename}"
+
+        # Fetch file content from S3 (flamegraph HTML files are not gzipped)
+        try:
+            html_content = s3_dal.get_object(s3_path, is_gzip=False)
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "NoSuchKey":
+                raise HTTPException(status_code=404, detail="Flamegraph file not found")
+            else:
+                raise HTTPException(status_code=500, detail="Failed to fetch flamegraph content from S3")
+
+        return FlamegraphContent(content=html_content, filename=filename)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching adhoc flamegraph content: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch flamegraph content")

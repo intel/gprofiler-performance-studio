@@ -173,6 +173,8 @@ class HeartbeatRequest(BaseModel):
     hostname: str
     service_name: str
     last_command_id: Optional[str] = None
+    received_command_ids: Optional[List[str]] = None
+    executed_command_ids: Optional[List[str]] = None
     status: str = "active"  # active, idle, error
     timestamp: Optional[datetime] = None
 
