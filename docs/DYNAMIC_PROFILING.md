@@ -194,10 +194,10 @@ psql -U postgres -d gprofiler
 ### 2. Verify Tables Created
 
 ```sql
-SELECT table_name 
-FROM information_schema.tables 
-WHERE table_schema = 'public' 
-  AND table_name LIKE '%profiling%' 
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+  AND table_name LIKE '%profiling%'
    OR table_name LIKE '%heartbeat%';
 ```
 
@@ -216,8 +216,8 @@ Expected tables:
 ### 3. Verify Indexes
 
 ```sql
-SELECT tablename, indexname 
-FROM pg_indexes 
+SELECT tablename, indexname
+FROM pg_indexes
 WHERE tablename IN ('profilingrequest', 'profilingcommand', 'hostheartbeats', 'profilingexecutions')
 ORDER BY tablename, indexname;
 ```
