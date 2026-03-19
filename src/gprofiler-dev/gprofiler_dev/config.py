@@ -38,3 +38,6 @@ PROFILER_PROCESSES_LRU_CACHE_LIMIT = os.getenv("PROFILER_PROCESSES_LRU_CACHE_LIM
 
 BUCKET_NAME = os.getenv("BUCKET_NAME", "gprofiler")
 BASE_DIRECTORY = "products"
+# Optional: Custom S3 endpoint for local testing (e.g., LocalStack) or S3-compatible services
+# In production, leave unset to use default AWS S3 endpoints
+S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")

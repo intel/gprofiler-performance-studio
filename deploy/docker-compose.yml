@@ -48,9 +48,6 @@ services:
       - POSTGRES_USER=$POSTGRES_USER
       - POSTGRES_PASSWORD=$POSTGRES_PASSWORD
       - POSTGRES_DB=$POSTGRES_DB
-# for debug
-#    ports:
-#      - "54321:5432"
     volumes:
       - db_postgres:/var/lib/postgresql/data
       - ../scripts/setup/postgres/gprofiler_recreate.sql:/docker-entrypoint-initdb.d/create_scheme.sql
@@ -175,6 +172,12 @@ services:
       - AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
       - AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
       - AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN
+    # PostgreSQL Configuration for Adhoc Flamegraph Metadata (using same env vars as webapp)
+      - GPROFILER_POSTGRES_HOST=$POSTGRES_HOST
+      - GPROFILER_POSTGRES_PORT=$POSTGRES_PORT
+      - GPROFILER_POSTGRES_USERNAME=$POSTGRES_USER
+      - GPROFILER_POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+      - GPROFILER_POSTGRES_DB_NAME=$POSTGRES_DB
   #---
   nginx-load-balancer:
     image: nginx:1.23.3

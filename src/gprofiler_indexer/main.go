@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"go.uber.org/zap"
 	"os"
 	"os/signal"
@@ -46,6 +47,23 @@ func main() {
 	args.ParseArgs()
 
 	logger.Infof("Starting %s", AppName)
+
+	// Initialize PostgreSQL connection for adhoc flamegraph metadata storage
+	postgresConnStr := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		args.PostgresHost,
+		args.PostgresPort,
+		args.PostgresUser,
+		args.PostgresPassword,
+		args.PostgresDB,
+	)
+	err := InitPostgres(postgresConnStr)
+	if err != nil {
+		logger.Fatalf("Failed to connect to PostgreSQL: %v", err)
+	}
+	logger.Infof("Connected to PostgreSQL at %s:%d", args.PostgresHost, args.PostgresPort)
+	defer ClosePostgres()
+
 	tasks := make(chan SQSMessage, args.Concurrency)
 	channels := RecordChannels{
 		StacksRecords:  make(chan StackRecord, args.ClickHouseStacksBatchSize),
@@ -107,5 +125,6 @@ func main() {
 	}()
 
 	buffWriterWaitGroup.Wait()
+
 	logger.Info("Graceful shutdown")
 }

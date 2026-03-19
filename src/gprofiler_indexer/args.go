@@ -36,6 +36,12 @@ type CLIArgs struct {
 	FrameReplaceFileName       string
 	AWSEndpoint                string
 	AWSRegion                  string
+	// PostgreSQL Configuration
+	PostgresHost     string
+	PostgresPort     int
+	PostgresUser     string
+	PostgresPassword string
+	PostgresDB       string
 }
 
 func NewCliArgs() *CLIArgs {
@@ -50,6 +56,12 @@ func NewCliArgs() *CLIArgs {
 		ClickHouseStacksBatchSize:  10000,
 		ClickHouseMetricsBatchSize: 100,
 		FrameReplaceFileName:       ConfPrefix + "replace.yaml",
+		// PostgreSQL defaults
+		PostgresHost:     "localhost",
+		PostgresPort:     5432,
+		PostgresUser:     "gprofiler",
+		PostgresPassword: "",
+		PostgresDB:       "gprofiler_db",
 	}
 }
 
@@ -57,7 +69,7 @@ func (ca *CLIArgs) ParseArgs() {
 	flag.StringVar(&ca.SQSQueue, "sqs-queue", LookupEnvOrString("SQS_QUEUE_URL", ca.SQSQueue),
 		"SQS Queue name to listen")
 	flag.StringVar(&ca.S3Bucket, "s3-bucket", LookupEnvOrString("S3_BUCKET", ca.S3Bucket), "S3 bucket name")
-	flag.StringVar(&ca.AWSEndpoint, "aws-endpoint", LookupEnvOrString("S3_ENDPOINT", ca.AWSEndpoint), "AWS Endpoint URL")
+	flag.StringVar(&ca.AWSEndpoint, "aws-endpoint", LookupEnvOrString("AWS_ENDPOINT_URL", ca.AWSEndpoint), "AWS Endpoint URL")
 	flag.StringVar(&ca.AWSRegion, "aws-region", LookupEnvOrString("AWS_REGION", ca.AWSRegion), "AWS Region")
 	flag.StringVar(&ca.ClickHouseAddr, "clickhouse-addr", LookupEnvOrString("CLICKHOUSE_ADDR", ca.ClickHouseAddr),
 		"ClickHouse address like 127.0.0.1:9000")
@@ -83,6 +95,17 @@ func (ca *CLIArgs) ParseArgs() {
 	flag.StringVar(&ca.FrameReplaceFileName, "replace-file", LookupEnvOrString("REPLACE_FILE",
 		ca.FrameReplaceFileName),
 		"replace.yaml")
+	// PostgreSQL Configuration (using same env vars as webapp for consistency)
+	flag.StringVar(&ca.PostgresHost, "postgres-host", LookupEnvOrString("GPROFILER_POSTGRES_HOST", ca.PostgresHost),
+		"PostgreSQL host (default localhost)")
+	flag.IntVar(&ca.PostgresPort, "postgres-port", LookupEnvOrInt("GPROFILER_POSTGRES_PORT", ca.PostgresPort),
+		"PostgreSQL port (default 5432)")
+	flag.StringVar(&ca.PostgresUser, "postgres-user", LookupEnvOrString("GPROFILER_POSTGRES_USERNAME", ca.PostgresUser),
+		"PostgreSQL user (default gprofiler)")
+	flag.StringVar(&ca.PostgresPassword, "postgres-password", LookupEnvOrString("GPROFILER_POSTGRES_PASSWORD", ca.PostgresPassword),
+		"PostgreSQL password")
+	flag.StringVar(&ca.PostgresDB, "postgres-db", LookupEnvOrString("GPROFILER_POSTGRES_DB_NAME", ca.PostgresDB),
+		"PostgreSQL database name (default gprofiler_db)")
 	flag.Parse()
 
 	if ca.SQSQueue == "" && ca.InputFolder == "" {

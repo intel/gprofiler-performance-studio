@@ -47,6 +47,11 @@ export const PAGES = {
         label: 'Login',
         to: '/login',
     },
+    profiling: {
+        key: 'profiling',
+        label: 'Dynamic Profiling',
+        to: '/profiling',
+    },
 };
 
 export const EXTERNAL_URLS = {
@@ -82,6 +87,7 @@ export const PROFILES_VIEWS = {
     table: 'table',
     service: 'service',
     html: 'html',
+    adhoc: 'adhoc',
 };
 
 export const SPLIT_VIEW_ANIMATION_DURATION_IN_SECONDS = 0.7;
