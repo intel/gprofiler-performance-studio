@@ -16,7 +16,7 @@
      */
 }
 
-import { Box } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { isEmpty } from 'lodash';
 import { useState } from 'react';
 
@@ -28,23 +28,45 @@ import CopyableParagraph from '../../common/dataDisplay/CopyableParagraph';
 
 const CmdDeployStepContent = ({ apiKey, serviceName, serverHost }) => {
     const [shouldAddNoVerify, setShouldAddNoVerify] = useState(true);
-    const deployCommand = `wget -O gprofiler https://github.com/intel/gprofiler/releases/latest/download/gprofiler_\`uname -m\`\nsudo chmod +x gprofiler\nsudo TMPDIR=/proc/self/cwd sh -c "setsid ./gprofiler -cu --token='${apiKey}' --service-name='${serviceName}' ${getServerHostFlag(
+
+    const staticCommand = `wget -O gprofiler https://github.com/intel/gprofiler/releases/latest/download/gprofiler_\`uname -m\`\nsudo chmod +x gprofiler\nsudo TMPDIR=/proc/self/cwd sh -c "setsid ./gprofiler -cu --token='${apiKey}' --service-name='${serviceName}' ${getServerHostFlag(
         serverHost
     )}${shouldAddNoVerify ? ' --no-verify' : ''}> /dev/null 2>&1 &"`;
+
+    const dynamicCommand = `wget -O gprofiler https://github.com/intel/gprofiler/releases/latest/download/gprofiler_\`uname -m\`\nsudo chmod +x gprofiler\nsudo TMPDIR=/proc/self/cwd sh -c "setsid ./gprofiler -u --token='${apiKey}' --service-name='${serviceName}' ${getServerHostFlag(
+        serverHost
+    )} --enable-heartbeat-server --api-server '${serverHost || 'https://your-server'}' --heartbeat-interval 30${
+        shouldAddNoVerify ? ' --no-verify' : ''
+    }> /dev/null 2>&1 &"`;
 
     const isParagraphDisabled = isEmpty(serviceName);
 
     return (
         <p className='content-paragraph'>
             <Flexbox column spacing={3}>
-                <Box>
-                    <CopyableParagraph disabled={isParagraphDisabled} isCode highlightedButton text={deployCommand} />
-                </Box>
                 <InstallationCheckBox
                     enableText={'Include skip verification flag for SSL certificate'}
                     isChecked={shouldAddNoVerify}
                     setIsChecked={setShouldAddNoVerify}
                 />
+                <Box>
+                    <Typography variant='body2' sx={{ mb: 1, fontWeight: 500 }}>
+                        Static Mode
+                    </Typography>
+                    <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mb: 2 }}>
+                        Continuous profiling with fixed configuration set at launch
+                    </Typography>
+                    <CopyableParagraph disabled={isParagraphDisabled} isCode highlightedButton text={staticCommand} />
+                </Box>
+                <Box>
+                    <Typography variant='body2' sx={{ mb: 1, fontWeight: 500 }}>
+                        Dynamic Mode
+                    </Typography>
+                    <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mb: 2 }}>
+                        Continuous profiling with runtime-adjustable configuration via web UI
+                    </Typography>
+                    <CopyableParagraph disabled={isParagraphDisabled} isCode highlightedButton text={dynamicCommand} />
+                </Box>
             </Flexbox>
         </p>
     );

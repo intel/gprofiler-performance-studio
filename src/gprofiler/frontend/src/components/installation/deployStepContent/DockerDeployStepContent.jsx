@@ -16,7 +16,7 @@
      */
 }
 
-import { Box } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { isEmpty } from 'lodash';
 import { useState } from 'react';
 
@@ -27,21 +27,45 @@ import { getServerHostFlag } from '@/utils/installationUtils';
 
 const DockerDeployStepContent = ({ apiKey, serviceName, serverHost }) => {
     const [shouldAddNoVerify, setShouldAddNoVerify] = useState(true);
-    const deployCommand = `docker pull intel/gprofiler:latest\ndocker run --name granulate-gprofiler --restart=always -d --pid=host --userns=host --privileged intel/gprofiler:latest -cu --token="${apiKey}" --service-name="${serviceName}" ${getServerHostFlag(
+
+    const staticCommand = `docker pull intel/gprofiler:latest\ndocker run --name granulate-gprofiler --restart=always -d --pid=host --userns=host --privileged intel/gprofiler:latest -cu --token="${apiKey}" --service-name="${serviceName}" ${getServerHostFlag(
         serverHost
     )}${shouldAddNoVerify ? ' --no-verify' : ''}`;
+
+    const dynamicCommand = `docker pull intel/gprofiler:latest\ndocker run --name granulate-gprofiler --restart=always -d --pid=host --userns=host --privileged intel/gprofiler:latest -u --token="${apiKey}" --service-name="${serviceName}" ${getServerHostFlag(
+        serverHost
+    )} --enable-heartbeat-server --api-server "${serverHost || 'https://your-server'}" --heartbeat-interval 30${
+        shouldAddNoVerify ? ' --no-verify' : ''
+    }`;
+
+    const isParagraphDisabled = isEmpty(serviceName);
 
     return (
         <p className='content-paragraph'>
             <Flexbox column spacing={3}>
-                <Box>
-                    <CopyableParagraph disabled={isEmpty(serviceName)} isCode highlightedButton text={deployCommand} />
-                </Box>
                 <InstallationCheckBox
                     enableText={'Include skip verification flag for SSL certificate'}
                     isChecked={shouldAddNoVerify}
                     setIsChecked={setShouldAddNoVerify}
                 />
+                <Box>
+                    <Typography variant='body2' sx={{ mb: 1, fontWeight: 500 }}>
+                        Static Mode
+                    </Typography>
+                    <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mb: 2 }}>
+                        Continuous profiling with fixed configuration set at launch
+                    </Typography>
+                    <CopyableParagraph disabled={isParagraphDisabled} isCode highlightedButton text={staticCommand} />
+                </Box>
+                <Box>
+                    <Typography variant='body2' sx={{ mb: 1, fontWeight: 500 }}>
+                        Dynamic Mode
+                    </Typography>
+                    <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mb: 2 }}>
+                        Continuous profiling with runtime-adjustable configuration via web UI
+                    </Typography>
+                    <CopyableParagraph disabled={isParagraphDisabled} isCode highlightedButton text={dynamicCommand} />
+                </Box>
             </Flexbox>
         </p>
     );
