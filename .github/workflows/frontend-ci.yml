@@ -86,9 +86,7 @@ jobs:
 
       # FRONTEND: 3rd party dependencies security vulnerability audit
       - name: Security vulnerabilities audit
-        # Currently silenced until lodash release security fix
-        # but still running for logging
-        run: npx audit-ci --none -a lodash immer
+        run: yarn audit --level moderate
         working-directory: ./src/gprofiler/frontend
 
       # FRONTEND: now let's try to build/compile our project
