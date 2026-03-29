@@ -9,7 +9,10 @@
     "rollup": "^4.59.0",
     "lodash": "^4.17.23",
     "js-yaml": "^3.14.2",
-    "diff": "^5.2.2"
+    "diff": "^5.2.2",
+    "yaml": "^2.8.3",
+    "brace-expansion": "^2.0.3",
+    "picomatch": "^4.0.4"
   },
   "dependencies": {
     "@date-io/date-fns": "^2.13.1",
