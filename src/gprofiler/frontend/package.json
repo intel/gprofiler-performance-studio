@@ -71,7 +71,7 @@
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "prettier": "^2.3.2",
     "use-resize-observer": "^7.0.1",
-    "vite": "^6.4.1",
+    "vite": "^6.4.2",
     "vite-plugin-svgr": "^2.2.2"
   }
 }
