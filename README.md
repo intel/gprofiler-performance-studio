@@ -278,3 +278,6 @@ To develop the project, it may be useful to run each component locally, see rele
 - [webapp (backend and frontend)](src/gprofiler/README.md)
 - [gprofiler_flamedb_rest](src/gprofiler_flamedb_rest/README.md)
 - [gprofiler_indexer](src/gprofiler_indexer/README.md)
+
+## Make good use of AI tools
+Using AI tools to review PRs is a good way to speed up development cycles
