@@ -45,20 +45,21 @@ same backend services and storage layer:
 ### Architecture diagram
 
 > The diagram is written in Mermaid so it stays diff-able. To export it as a PNG / SVG
-> for slides or a blog post, paste the source into [mermaid.live](https://mermaid.live)
+> for slides or docs, paste the source into [mermaid.live](https://mermaid.live)
 > and pick your preferred background — the theme below is tuned for a light grey canvas.
 
 ```mermaid
 %%{init: {
   'theme': 'base',
   'themeVariables': {
-    'background': '#f3f4f6',
+    'background': '#e5e7eb',
     'primaryColor': '#ffffff',
     'primaryBorderColor': '#cbd5e1',
     'primaryTextColor': '#0f172a',
     'lineColor': '#64748b',
     'fontFamily': 'Inter, ui-sans-serif, system-ui, sans-serif',
-    'fontSize': '14px'
+    'fontSize': '14px',
+    'borderRadius': '8px'
   }
 }}%%
 flowchart TB
