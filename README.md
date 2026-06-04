@@ -29,17 +29,120 @@ featuring advanced flamegraph analysis tools.
 
 
 ## System Overview
-![system_overview.png](system_overview.png)
-The Continuous Profiler is structured around several key microservices,
-each playing a vital role in its functionality:
 
-- `src/gprofiler/backend` - This is the web application backend. It exposes all APIs to the frontend or API users and is responsible for collecting data from agents.
-- `src/gprofiler/frontend` - The User Interface of Continuous Profiler, facilitating interaction with the backend.
-- `src/gprofiler_indexer` - This service is tasked with collecting raw profiling data from S3 storage and indexing it for ClickHouse, a database management system.
-- `src/gprofiler_flamedb_rest` - Handles communication with ClickHouse for the purpose of constructing flamegraphs.
-- `src/gprofiler_logging` - Dedicated to collecting logs from agents, ensuring a comprehensive logging system.
+The Continuous Profiler Performance Studio supports **two profiling modes** that share the
+same backend services and storage layer:
 
-This architecture allows for efficient handling and analysis of profiling data, providing users with an intuitive and powerful tool for performance analysis.
+1. **Continuous profiling (data plane)** — Agents periodically upload profile data which is
+   indexed into ClickHouse and visualized as flame graphs.
+2. **Dynamic profiling (control plane)** — Operators trigger ad-hoc / on-demand profiling
+   sessions from the UI; agents fetch start / stop commands via a heartbeat protocol and can
+   optionally collect Intel® PerfSpect hardware metrics. See
+   [`heartbeat_doc/README_HEARTBEAT.md`](heartbeat_doc/README_HEARTBEAT.md) and
+   [`heartbeat_doc/PERFSPECT_DYNAMIC_PROFILING.md`](heartbeat_doc/PERFSPECT_DYNAMIC_PROFILING.md)
+   for details.
+
+### Architecture diagram
+
+```mermaid
+flowchart TB
+    classDef agent fill:#eef4ff,stroke:#4c6ef5,color:#1a2740
+    classDef backend fill:#ede9fe,stroke:#7c3aed,color:#1a2740
+    classDef ui fill:#fef3c7,stroke:#d97706,color:#1a2740
+    classDef store fill:#f1f5f9,stroke:#475569,color:#1a2740
+    classDef aws fill:#fff7ed,stroke:#ea580c,color:#1a2740
+
+    subgraph AGENT["gProfiler Agent (host)"]
+        direction TB
+        HB["Heartbeat loop<br/>POST /api/metrics/heartbeat"]
+        CMQ["CommandManager<br/>(priority queue:<br/>stop &gt; ad-hoc &gt; continuous)"]
+        CS["ContinuousProfilerSlot"]
+        AS["AdhocProfilerSlot"]
+        PSI["PerfSpect installer<br/>(HW metrics, optional)"]
+        LOG["Agent logs"]
+        HB --> CMQ
+        CMQ --> CS
+        CMQ --> AS
+        CS -. enable_perfspect .-> PSI
+        AS -. enable_perfspect .-> PSI
+    end
+    class AGENT,HB,CMQ,CS,AS,PSI,LOG agent
+
+    subgraph UI["Frontend UI (src/gprofiler/frontend)"]
+        FG["Flame graph &amp; search views"]
+        CTRL["Dynamic profiling console<br/>Start / Stop, PIDs,<br/>PerfSpect HW metrics"]
+    end
+    class UI,FG,CTRL ui
+
+    subgraph BE["Performance Studio Backend"]
+        WEBAPP["webapp / backend (FastAPI)<br/>src/gprofiler/backend<br/>• /api/metrics/profile_request[/bulk]<br/>• /api/metrics/heartbeat<br/>• /api/metrics/command_completion<br/>• PMU + capacity validation<br/>• Slack notifications"]
+        LOGSVC["agents-logs-backend<br/>src/gprofiler_logging"]
+        IDX["gprofiler_indexer"]
+        REST["gprofiler_flamedb_rest"]
+    end
+    class BE,WEBAPP,LOGSVC,IDX,REST backend
+
+    PG[("PostgreSQL<br/>HostHeartbeats<br/>ProfilingRequests<br/>ProfilingCommands<br/>ProfilingExecutions<br/>service metadata")]
+    CH[("ClickHouse<br/>flamedb")]
+    S3[["AWS S3<br/>(profile data + adhoc)"]]
+    SQS[["AWS SQS<br/>(indexer queue)"]]
+    class PG,CH store
+    class S3,SQS aws
+
+    %% --- Continuous data plane ---
+    CS -- "upload profile" --> WEBAPP
+    AS -- "upload adhoc flamegraph" --> WEBAPP
+    WEBAPP -- "store raw" --> S3
+    WEBAPP -- "enqueue index task" --> SQS
+    SQS -- "trigger" --> IDX
+    IDX -- "read raw" --> S3
+    IDX -- "write samples" --> CH
+    REST -- "query" --> CH
+    WEBAPP -- "query flames" --> REST
+
+    %% --- Logs ---
+    LOG -- "POST agent logs" --> LOGSVC
+    LOGSVC --> PG
+
+    %% --- Metadata ---
+    WEBAPP <--> PG
+
+    %% --- Dynamic profiling control plane ---
+    HB <==> |"heartbeat &uarr;<br/>command &darr;"| WEBAPP
+    CTRL -- "create profiling request" --> WEBAPP
+
+    %% --- UI queries ---
+    FG -- "queries" --> WEBAPP
+```
+
+### Components
+
+The Performance Studio is structured around several key microservices:
+
+- `src/gprofiler/backend` — Web application backend (FastAPI). Exposes APIs to the frontend
+  and API users, ingests continuous profile data from agents, and hosts the **dynamic
+  profiling control plane** (`/api/metrics/heartbeat`, `/api/metrics/profile_request`,
+  `/api/metrics/profile_request/bulk`, `/api/metrics/command_completion`,
+  `/api/metrics/profiling/host_status`).
+- `src/gprofiler/frontend` — Web UI. Renders flame graphs and provides the dynamic
+  profiling console (Start / Stop, target hosts and PIDs, PerfSpect hardware-metrics
+  toggle).
+- `src/gprofiler_indexer` — Reads raw profiling data from S3 (triggered via SQS) and
+  indexes it into ClickHouse.
+- `src/gprofiler_flamedb_rest` — REST layer that the backend uses to query flame graphs
+  out of ClickHouse.
+- `src/gprofiler_logging` (`agents-logs-backend`) — Collects logs from agents.
+
+The **gProfiler agent** itself (see [intel/gprofiler](https://github.com/intel/gprofiler))
+runs on each profiled host and contributes two roles:
+
+- **Data plane** — Continuously uploads profile data to the backend.
+- **Control plane** — When started with `--enable-heartbeat-server`, runs a heartbeat
+  loop that fetches start / stop commands from the backend and dispatches them through a
+  `CommandManager` priority queue into one of two execution slots
+  (`ContinuousProfilerSlot`, `AdhocProfilerSlot`) which can run in parallel for
+  non-overlapping profiler types. Optionally bootstraps Intel® PerfSpect for hardware
+  metrics collection.
 
 ### External Dependencies: AWS Services
 The Continuous Profiler incorporates specific AWS services as essential components.
@@ -51,6 +154,10 @@ These dependencies are:
 
 You are welcome to replace those services with other similar which implement the same API,
 like Minio for S3 and RabbitMQ for SQS.
+
+> **Note:** The legacy `system_overview.png` diagram only depicted the continuous data
+> plane and predates dynamic profiling. The Mermaid diagram above is the current source of
+> truth.
 
 ## Usage
 
