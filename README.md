@@ -52,21 +52,8 @@ flowchart TB
     classDef store fill:#f1f5f9,stroke:#475569,color:#1a2740
     classDef aws fill:#fff7ed,stroke:#ea580c,color:#1a2740
 
-    subgraph AGENT["gProfiler Agent (host)"]
-        direction TB
-        HB["Heartbeat loop<br/>POST /api/metrics/heartbeat"]
-        CMQ["CommandManager<br/>(priority queue:<br/>stop &gt; ad-hoc &gt; continuous)"]
-        CS["ContinuousProfilerSlot"]
-        AS["AdhocProfilerSlot"]
-        PSI["PerfSpect installer<br/>(HW metrics, optional)"]
-        LOG["Agent logs"]
-        HB --> CMQ
-        CMQ --> CS
-        CMQ --> AS
-        CS -. enable_perfspect .-> PSI
-        AS -. enable_perfspect .-> PSI
-    end
-    class AGENT,HB,CMQ,CS,AS,PSI,LOG agent
+    AGENT["gProfiler Agent (host)<br/>• continuous + ad-hoc profiling<br/>• optional Intel® PerfSpect HW metrics"]
+    class AGENT agent
 
     subgraph UI["Frontend UI (src/gprofiler/frontend)"]
         FG["Flame graph &amp; search views"]
@@ -90,8 +77,7 @@ flowchart TB
     class S3,SQS aws
 
     %% --- Continuous data plane ---
-    CS -- "upload profile" --> WEBAPP
-    AS -- "upload adhoc flamegraph" --> WEBAPP
+    AGENT -- "upload profile / adhoc flamegraph" --> WEBAPP
     WEBAPP -- "store raw" --> S3
     WEBAPP -- "enqueue index task" --> SQS
     SQS -- "trigger" --> IDX
@@ -101,14 +87,14 @@ flowchart TB
     WEBAPP -- "query flames" --> REST
 
     %% --- Logs ---
-    LOG -- "POST agent logs" --> LOGSVC
+    AGENT -- "POST agent logs" --> LOGSVC
     LOGSVC --> PG
 
     %% --- Metadata ---
     WEBAPP <--> PG
 
     %% --- Dynamic profiling control plane ---
-    HB <==> |"heartbeat &uarr;<br/>command &darr;"| WEBAPP
+    AGENT <==> |"heartbeat &uarr;<br/>command &darr;"| WEBAPP
     CTRL -- "create profiling request" --> WEBAPP
 
     %% --- UI queries ---
