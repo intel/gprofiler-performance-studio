@@ -95,7 +95,7 @@ flowchart TB
       SQS["☁️ <b>AWS SQS</b><br/>indexer queue"]:::aws
     end
 
-    style CANVAS fill:#e5e7eb,stroke:#cbd5e1,stroke-width:1px,color:#0f172a
+    style CANVAS fill:#f1f5f9,stroke:#e2e8f0,stroke-width:1px,color:#0f172a
     style UIBOX  fill:#fafafa,stroke:#e5e7eb,stroke-width:1px,color:#0f172a
     style BEBOX  fill:#fafafa,stroke:#e5e7eb,stroke-width:1px,color:#0f172a
 
