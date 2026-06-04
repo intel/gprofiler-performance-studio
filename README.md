@@ -44,12 +44,13 @@ same backend services and storage layer:
 
 ### Architecture diagram
 
-> The diagram is written in Mermaid so it stays diff-able. The outer grey card and
-> rounded corners below render natively on GitHub via `style` directives and `rx`/`ry`
-> on each `classDef`. For a clean PNG / SVG export for slides or docs, paste the source
-> into [mermaid.live](https://mermaid.live) and use its **Background** picker (Mermaid
-> itself doesn't expose a `background` theme variable — the SVG is transparent and the
-> page CSS shows through).
+> The diagram is written in Mermaid so it stays diff-able. The light-grey container
+> cards (Frontend UI, Performance Studio Backend) and rounded corners below render
+> natively on GitHub via `style` directives and `rx`/`ry` on each `classDef`. For a
+> clean PNG / SVG export for slides or docs, paste the source into
+> [mermaid.live](https://mermaid.live) and use its **Background** picker (Mermaid
+> itself doesn't expose a `background` theme variable — the SVG is transparent and
+> the page CSS shows through).
 
 ```mermaid
 %%{init: {
@@ -70,34 +71,29 @@ flowchart TB
     classDef store fill:#fde2f3,stroke:#db2777,stroke-width:1.5px,color:#1e293b,rx:8,ry:8
     classDef aws   fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#1e293b,rx:8,ry:8
 
-    subgraph CANVAS[" "]
+    AGENT["🖥️ <b>gProfiler Agent</b> (host)<br/>continuous + ad-hoc profiling<br/>+ optional Intel® PerfSpect HW metrics"]:::agent
+
+    subgraph UIBOX["🌐 Frontend UI"]
       direction TB
-
-      AGENT["🖥️ <b>gProfiler Agent</b> (host)<br/>continuous + ad-hoc profiling<br/>+ optional Intel® PerfSpect HW metrics"]:::agent
-
-      subgraph UIBOX["🌐 Frontend UI"]
-        direction TB
-        FG["Flame graphs &amp; search"]:::ui
-        CTRL["Dynamic profiling console<br/>Start / Stop · PIDs · PerfSpect"]:::ui
-      end
-
-      subgraph BEBOX["⚙️ Performance Studio Backend"]
-        direction TB
-        WEBAPP["<b>webapp / FastAPI</b><br/>profile_request · heartbeat<br/>command_completion · host_status"]:::be
-        LOGSVC["agents-logs-backend"]:::be
-        IDX["gprofiler_indexer"]:::be
-        REST["gprofiler_flamedb_rest"]:::be
-      end
-
-      PG[("🗄️ PostgreSQL<br/>HostHeartbeats · ProfilingRequests<br/>ProfilingCommands · service metadata")]:::store
-      CH[("🗄️ ClickHouse — flamedb")]:::store
-      S3["☁️ <b>AWS S3</b><br/>profile data + adhoc"]:::aws
-      SQS["☁️ <b>AWS SQS</b><br/>indexer queue"]:::aws
+      FG["Flame graphs &amp; search"]:::ui
+      CTRL["Dynamic profiling console<br/>Start / Stop · PIDs · PerfSpect"]:::ui
     end
 
-    style CANVAS fill:#f1f5f9,stroke:#e2e8f0,stroke-width:1px,color:#0f172a
-    style UIBOX  fill:#fafafa,stroke:#e5e7eb,stroke-width:1px,color:#0f172a
-    style BEBOX  fill:#fafafa,stroke:#e5e7eb,stroke-width:1px,color:#0f172a
+    subgraph BEBOX["⚙️ Performance Studio Backend"]
+      direction TB
+      WEBAPP["<b>webapp / FastAPI</b><br/>profile_request · heartbeat<br/>command_completion · host_status"]:::be
+      LOGSVC["agents-logs-backend"]:::be
+      IDX["gprofiler_indexer"]:::be
+      REST["gprofiler_flamedb_rest"]:::be
+    end
+
+    PG[("🗄️ PostgreSQL<br/>HostHeartbeats · ProfilingRequests<br/>ProfilingCommands · service metadata")]:::store
+    CH[("🗄️ ClickHouse — flamedb")]:::store
+    S3["☁️ <b>AWS S3</b><br/>profile data + adhoc"]:::aws
+    SQS["☁️ <b>AWS SQS</b><br/>indexer queue"]:::aws
+
+    style UIBOX fill:#f1f5f9,stroke:#e2e8f0,stroke-width:1px,color:#0f172a
+    style BEBOX fill:#f1f5f9,stroke:#e2e8f0,stroke-width:1px,color:#0f172a
 
     %% --- data plane (solid) ---
     AGENT -- "upload profile / adhoc" --> WEBAPP
