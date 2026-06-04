@@ -86,8 +86,8 @@ flowchart TB
 
     PG[("🗄️ PostgreSQL<br/>HostHeartbeats · ProfilingRequests<br/>ProfilingCommands · service metadata")]:::store
     CH[("🗄️ ClickHouse — flamedb")]:::store
-    S3[["☁️ AWS S3"]]:::aws
-    SQS[["☁️ AWS SQS"]]:::aws
+    S3["☁️ <b>AWS S3</b><br/>profile data + adhoc"]:::aws
+    SQS["☁️ <b>AWS SQS</b><br/>indexer queue"]:::aws
 
     style UIBOX fill:#fafafa,stroke:#e5e7eb,stroke-width:1px,color:#0f172a
     style BEBOX fill:#fafafa,stroke:#e5e7eb,stroke-width:1px,color:#0f172a
