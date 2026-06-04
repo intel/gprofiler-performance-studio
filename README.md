@@ -44,62 +44,76 @@ same backend services and storage layer:
 
 ### Architecture diagram
 
+> The diagram is written in Mermaid so it stays diff-able. To export it as a PNG / SVG
+> for slides or a blog post, paste the source into [mermaid.live](https://mermaid.live)
+> and pick your preferred background — the theme below is tuned for a light grey canvas.
+
 ```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'background': '#f3f4f6',
+    'primaryColor': '#ffffff',
+    'primaryBorderColor': '#cbd5e1',
+    'primaryTextColor': '#0f172a',
+    'lineColor': '#64748b',
+    'fontFamily': 'Inter, ui-sans-serif, system-ui, sans-serif',
+    'fontSize': '14px'
+  }
+}}%%
 flowchart TB
-    classDef agent fill:#eef4ff,stroke:#4c6ef5,color:#1a2740
-    classDef backend fill:#ede9fe,stroke:#7c3aed,color:#1a2740
-    classDef ui fill:#fef3c7,stroke:#d97706,color:#1a2740
-    classDef store fill:#f1f5f9,stroke:#475569,color:#1a2740
-    classDef aws fill:#fff7ed,stroke:#ea580c,color:#1a2740
+    classDef agent fill:#eaf2ff,stroke:#3b82f6,stroke-width:1.5px,color:#1e293b
+    classDef ui    fill:#fff4d6,stroke:#d97706,stroke-width:1.5px,color:#1e293b
+    classDef be    fill:#ece6ff,stroke:#7c3aed,stroke-width:1.5px,color:#1e293b
+    classDef store fill:#fde2f3,stroke:#db2777,stroke-width:1.5px,color:#1e293b
+    classDef aws   fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#1e293b
 
-    AGENT["gProfiler Agent (host)<br/>• continuous + ad-hoc profiling<br/>• optional Intel® PerfSpect HW metrics"]
-    class AGENT agent
+    AGENT["🖥️ <b>gProfiler Agent</b> (host)<br/>continuous + ad-hoc profiling<br/>+ optional Intel® PerfSpect HW metrics"]:::agent
 
-    subgraph UI["Frontend UI (src/gprofiler/frontend)"]
-        FG["Flame graph &amp; search views"]
-        CTRL["Dynamic profiling console<br/>Start / Stop, PIDs,<br/>PerfSpect HW metrics"]
+    subgraph UIBOX["🌐 Frontend UI"]
+      direction TB
+      FG["Flame graphs &amp; search"]:::ui
+      CTRL["Dynamic profiling console<br/>Start / Stop · PIDs · PerfSpect"]:::ui
     end
-    class UI,FG,CTRL ui
 
-    subgraph BE["Performance Studio Backend"]
-        WEBAPP["webapp / backend (FastAPI)<br/>src/gprofiler/backend<br/>• /api/metrics/profile_request[/bulk]<br/>• /api/metrics/heartbeat<br/>• /api/metrics/command_completion<br/>• PMU + capacity validation<br/>• Slack notifications"]
-        LOGSVC["agents-logs-backend<br/>src/gprofiler_logging"]
-        IDX["gprofiler_indexer"]
-        REST["gprofiler_flamedb_rest"]
+    subgraph BEBOX["⚙️ Performance Studio Backend"]
+      direction TB
+      WEBAPP["<b>webapp / FastAPI</b><br/>profile_request · heartbeat<br/>command_completion · host_status"]:::be
+      LOGSVC["agents-logs-backend"]:::be
+      IDX["gprofiler_indexer"]:::be
+      REST["gprofiler_flamedb_rest"]:::be
     end
-    class BE,WEBAPP,LOGSVC,IDX,REST backend
 
-    PG[("PostgreSQL<br/>HostHeartbeats<br/>ProfilingRequests<br/>ProfilingCommands<br/>ProfilingExecutions<br/>service metadata")]
-    CH[("ClickHouse<br/>flamedb")]
-    S3[["AWS S3<br/>(profile data + adhoc)"]]
-    SQS[["AWS SQS<br/>(indexer queue)"]]
-    class PG,CH store
-    class S3,SQS aws
+    PG[("🗄️ PostgreSQL<br/>HostHeartbeats · ProfilingRequests<br/>ProfilingCommands · service metadata")]:::store
+    CH[("🗄️ ClickHouse — flamedb")]:::store
+    S3[["☁️ AWS S3"]]:::aws
+    SQS[["☁️ AWS SQS"]]:::aws
 
-    %% --- Continuous data plane ---
-    AGENT -- "upload profile / adhoc flamegraph" --> WEBAPP
+    style UIBOX fill:#fafafa,stroke:#e5e7eb,stroke-width:1px,color:#0f172a
+    style BEBOX fill:#fafafa,stroke:#e5e7eb,stroke-width:1px,color:#0f172a
+
+    %% --- data plane (solid) ---
+    AGENT -- "upload profile / adhoc" --> WEBAPP
     WEBAPP -- "store raw" --> S3
-    WEBAPP -- "enqueue index task" --> SQS
+    WEBAPP -- "enqueue" --> SQS
     SQS -- "trigger" --> IDX
     IDX -- "read raw" --> S3
     IDX -- "write samples" --> CH
+    WEBAPP <--> REST
     REST -- "query" --> CH
-    WEBAPP -- "query flames" --> REST
-
-    %% --- Logs ---
-    AGENT -- "POST agent logs" --> LOGSVC
+    AGENT -- "agent logs" --> LOGSVC
     LOGSVC --> PG
-
-    %% --- Metadata ---
     WEBAPP <--> PG
-
-    %% --- Dynamic profiling control plane ---
-    AGENT <==> |"heartbeat &uarr;<br/>command &darr;"| WEBAPP
-    CTRL -- "create profiling request" --> WEBAPP
-
-    %% --- UI queries ---
     FG -- "queries" --> WEBAPP
+
+    %% --- control plane (dashed) ---
+    AGENT <-. "heartbeat ↑ / command ↓" .-> WEBAPP
+    CTRL -. "profiling request" .-> WEBAPP
 ```
+
+**Legend.** Solid arrows are the continuous **data plane** (profile upload → S3 → SQS →
+indexer → ClickHouse → flame graphs). Dashed arrows are the dynamic **control plane**
+(UI creates a profiling request; agent fetches start / stop commands via heartbeat).
 
 ### Components
 
