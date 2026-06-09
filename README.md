@@ -29,17 +29,123 @@ featuring advanced flamegraph analysis tools.
 
 
 ## System Overview
-![system_overview.png](system_overview.png)
-The Continuous Profiler is structured around several key microservices,
-each playing a vital role in its functionality:
 
-- `src/gprofiler/backend` - This is the web application backend. It exposes all APIs to the frontend or API users and is responsible for collecting data from agents.
-- `src/gprofiler/frontend` - The User Interface of Continuous Profiler, facilitating interaction with the backend.
-- `src/gprofiler_indexer` - This service is tasked with collecting raw profiling data from S3 storage and indexing it for ClickHouse, a database management system.
-- `src/gprofiler_flamedb_rest` - Handles communication with ClickHouse for the purpose of constructing flamegraphs.
-- `src/gprofiler_logging` - Dedicated to collecting logs from agents, ensuring a comprehensive logging system.
+The Continuous Profiler Performance Studio supports **two profiling modes** that share the
+same backend services and storage layer:
 
-This architecture allows for efficient handling and analysis of profiling data, providing users with an intuitive and powerful tool for performance analysis.
+1. **Continuous profiling (data plane)** — Agents periodically upload profile data which is
+   indexed into ClickHouse and visualized as flame graphs.
+2. **Dynamic profiling (control plane)** — Operators trigger ad-hoc / on-demand profiling
+   sessions from the UI; agents fetch start / stop commands via a heartbeat protocol and can
+   optionally collect Intel® PerfSpect hardware metrics. See
+   [`heartbeat_doc/README_HEARTBEAT.md`](heartbeat_doc/README_HEARTBEAT.md) and
+   [`heartbeat_doc/PERFSPECT_DYNAMIC_PROFILING.md`](heartbeat_doc/PERFSPECT_DYNAMIC_PROFILING.md)
+   for details.
+
+### Architecture diagram
+
+> The diagram is written in Mermaid so it stays diff-able. The light-grey container
+> cards (Frontend UI, Performance Studio Backend) and rounded corners below render
+> natively on GitHub via `style` directives and `rx`/`ry` on each `classDef`. For a
+> clean PNG / SVG export for slides or docs, paste the source into
+> [mermaid.live](https://mermaid.live) and use its **Background** picker (Mermaid
+> itself doesn't expose a `background` theme variable — the SVG is transparent and
+> the page CSS shows through).
+
+```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#ffffff',
+    'primaryBorderColor': '#cbd5e1',
+    'primaryTextColor': '#0f172a',
+    'lineColor': '#64748b',
+    'fontFamily': 'Inter, ui-sans-serif, system-ui, sans-serif',
+    'fontSize': '14px'
+  }
+}}%%
+flowchart TB
+    classDef agent fill:#eaf2ff,stroke:#3b82f6,stroke-width:1.5px,color:#1e293b,rx:8,ry:8
+    classDef ui    fill:#fff4d6,stroke:#d97706,stroke-width:1.5px,color:#1e293b,rx:8,ry:8
+    classDef be    fill:#ece6ff,stroke:#7c3aed,stroke-width:1.5px,color:#1e293b,rx:8,ry:8
+    classDef store fill:#fde2f3,stroke:#db2777,stroke-width:1.5px,color:#1e293b,rx:8,ry:8
+    classDef aws   fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#1e293b,rx:8,ry:8
+
+    AGENT["🖥️ <b>gProfiler Agent</b> (host)<br/>continuous + ad-hoc profiling<br/>+ optional Intel® PerfSpect HW metrics"]:::agent
+
+    subgraph UIBOX["🌐 Frontend UI"]
+      direction TB
+      FG["Flame graphs &amp; search"]:::ui
+      CTRL["Dynamic profiling console<br/>Start / Stop · PIDs · PerfSpect"]:::ui
+    end
+
+    subgraph BEBOX["⚙️ Performance Studio Backend"]
+      direction TB
+      WEBAPP["<b>webapp / FastAPI</b><br/>profile_request · heartbeat<br/>command_completion · host_status"]:::be
+      LOGSVC["agents-logs-backend"]:::be
+      IDX["gprofiler_indexer"]:::be
+      REST["gprofiler_flamedb_rest"]:::be
+    end
+
+    PG[("🗄️ PostgreSQL<br/>HostHeartbeats · ProfilingRequests<br/>ProfilingCommands · service metadata")]:::store
+    CH[("🗄️ ClickHouse — flamedb")]:::store
+    S3["☁️ <b>AWS S3</b><br/>profile data + adhoc"]:::aws
+    SQS["☁️ <b>AWS SQS</b><br/>indexer queue"]:::aws
+
+    style UIBOX fill:#f1f5f9,stroke:#e2e8f0,stroke-width:1px,color:#0f172a
+    style BEBOX fill:#f1f5f9,stroke:#e2e8f0,stroke-width:1px,color:#0f172a
+
+    %% --- data plane (solid) ---
+    AGENT -- "upload profile / adhoc" --> WEBAPP
+    WEBAPP -- "store raw" --> S3
+    WEBAPP -- "enqueue" --> SQS
+    SQS -- "trigger" --> IDX
+    IDX -- "read raw" --> S3
+    IDX -- "write samples" --> CH
+    WEBAPP <--> REST
+    REST -- "query" --> CH
+    AGENT -- "agent logs" --> LOGSVC
+    LOGSVC --> PG
+    WEBAPP <--> PG
+    FG -- "queries" --> WEBAPP
+
+    %% --- control plane (dashed) ---
+    AGENT <-. "heartbeat ↑ / command ↓" .-> WEBAPP
+    CTRL -. "profiling request" .-> WEBAPP
+```
+
+**Legend.** Solid arrows are the continuous **data plane** (profile upload → S3 → SQS →
+indexer → ClickHouse → flame graphs). Dashed arrows are the dynamic **control plane**
+(UI creates a profiling request; agent fetches start / stop commands via heartbeat).
+
+### Components
+
+The Performance Studio is structured around several key microservices:
+
+- `src/gprofiler/backend` — Web application backend (FastAPI). Exposes APIs to the frontend
+  and API users, ingests continuous profile data from agents, and hosts the **dynamic
+  profiling control plane** (`/api/metrics/heartbeat`, `/api/metrics/profile_request`,
+  `/api/metrics/profile_request/bulk`, `/api/metrics/command_completion`,
+  `/api/metrics/profiling/host_status`).
+- `src/gprofiler/frontend` — Web UI. Renders flame graphs and provides the dynamic
+  profiling console (Start / Stop, target hosts and PIDs, PerfSpect hardware-metrics
+  toggle).
+- `src/gprofiler_indexer` — Reads raw profiling data from S3 (triggered via SQS) and
+  indexes it into ClickHouse.
+- `src/gprofiler_flamedb_rest` — REST layer that the backend uses to query flame graphs
+  out of ClickHouse.
+- `src/gprofiler_logging` (`agents-logs-backend`) — Collects logs from agents.
+
+The **gProfiler agent** itself (see [intel/gprofiler](https://github.com/intel/gprofiler))
+runs on each profiled host and contributes two roles:
+
+- **Data plane** — Continuously uploads profile data to the backend.
+- **Control plane** — When started with `--enable-heartbeat-server`, runs a heartbeat
+  loop that fetches start / stop commands from the backend and dispatches them through a
+  `CommandManager` priority queue into one of two execution slots
+  (`ContinuousProfilerSlot`, `AdhocProfilerSlot`) which can run in parallel for
+  non-overlapping profiler types. Optionally bootstraps Intel® PerfSpect for hardware
+  metrics collection.
 
 ### External Dependencies: AWS Services
 The Continuous Profiler incorporates specific AWS services as essential components.
@@ -51,6 +157,10 @@ These dependencies are:
 
 You are welcome to replace those services with other similar which implement the same API,
 like Minio for S3 and RabbitMQ for SQS.
+
+> **Note:** The legacy `system_overview.png` diagram only depicted the continuous data
+> plane and predates dynamic profiling. The Mermaid diagram above is the current source of
+> truth.
 
 ## Usage
 
