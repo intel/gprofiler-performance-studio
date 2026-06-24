@@ -28,6 +28,7 @@ export default defineConfig({
     },
     build: {
         outDir: 'build',
+        target: 'es2020',
     },
     server: {
         open: true,
