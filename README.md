@@ -26,6 +26,7 @@ featuring advanced flamegraph analysis tools.
 - [Usage](#usage)
 - [Managing the stack](#managing-the-stack)
 - [Local running and development](#local-running-and-development)
+- [End-to-end test harness](#end-to-end-test-harness)
 
 
 ## System Overview
@@ -55,6 +56,7 @@ same backend services and storage layer:
 ```mermaid
 %%{init: {
   'theme': 'base',
+  'flowchart': { 'defaultRenderer': 'elk' },
   'themeVariables': {
     'primaryColor': '#ffffff',
     'primaryBorderColor': '#cbd5e1',
@@ -388,3 +390,16 @@ To develop the project, it may be useful to run each component locally, see rele
 - [webapp (backend and frontend)](src/gprofiler/README.md)
 - [gprofiler_flamedb_rest](src/gprofiler_flamedb_rest/README.md)
 - [gprofiler_indexer](src/gprofiler_indexer/README.md)
+
+## End-to-end test harness
+To run the full stack **plus a real gProfiler agent** locally (LocalStack S3/SQS
+included) and exercise the workload-level profiling flow end to end — with API
+acceptance tests (AT-S1..S15) and Playwright UI tests — see
+[deploy/E2E_HARNESS.md](deploy/E2E_HARNESS.md).
+
+```bash
+cd deploy
+make -f Makefile.e2e e2e-up-src    # studio + sample workload + source-built agent
+make -f Makefile.e2e e2e-test      # API acceptance suite
+make -f Makefile.e2e e2e-ui-test   # Playwright UI suite
+```

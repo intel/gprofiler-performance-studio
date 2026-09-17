@@ -1,0 +1,114 @@
+# E2E harness for Performance Studio + a real gProfiler agent.
+#
+# Usage:
+#   make -f Makefile.e2e e2e-up        # bring up studio + sample app + agent
+#   make -f Makefile.e2e e2e-status    # show the agent in workload_status
+#   make -f Makefile.e2e e2e-start     # submit a host-scope start (SERVICE/HOST overridable)
+#   make -f Makefile.e2e e2e-stop      # submit a host-scope stop
+#   make -f Makefile.e2e e2e-agent-logs
+#   make -f Makefile.e2e e2e-test      # run in-network pytest acceptance suite
+#   make -f Makefile.e2e e2e-down      # remove only the agent + sample app (studio stays up)
+#   make -f Makefile.e2e e2e-down-all  # tear the whole stack down (destructive)
+
+SHELL := /bin/bash
+
+COMPOSE := docker compose -f docker-compose.yml -f docker-compose.e2e.yml --profile with-clickhouse
+NGINX   := https://localhost:4433
+AUTH    := admin:admin
+SERVICE ?= e2e-sample-app
+# Compose default network. Derived from the project name (the deploy/ dir), so
+# override NETWORK=<name>_default if you set COMPOSE_PROJECT_NAME.
+NETWORK ?= $(notdir $(CURDIR))_default
+
+# Source-build settings (sibling agent repo).
+AGENT_REPO      ?= ../../gprofiler
+AGENT_ARCH      ?= x86_64
+AGENT_SRC_IMAGE ?= gprofiler-e2e-agent:src
+
+# Placeholder token so compose can parse before a real one is minted; the agent
+# is re-created with the real token in e2e-up.
+export GPROFILER_TOKEN ?= bootstrap
+
+.PHONY: e2e-up e2e-up-src e2e-agent-build e2e-token e2e-status e2e-start e2e-stop e2e-agent-logs e2e-test e2e-down e2e-down-all e2e-flamegraph
+
+## Build the agent image FROM SOURCE using the fast (no-staticx) build (~1-2 min
+## warm cache). The --fast exe is glibc-dynamic, so it's wrapped in a glibc base.
+e2e-agent-build:
+	@echo ">> building agent executable from source (--fast, no staticx)"
+	cd $(AGENT_REPO) && scripts/build_$(AGENT_ARCH)_executable.sh --fast
+	@echo ">> wrapping exe in glibc base -> $(AGENT_SRC_IMAGE)"
+	docker build -f e2e/agent-glibc.Dockerfile --build-arg ARCH=$(AGENT_ARCH) -t $(AGENT_SRC_IMAGE) $(AGENT_REPO)
+
+## Build the agent from source, then bring the whole harness up with it.
+e2e-up-src: e2e-agent-build
+	GPROFILER_IMAGE=$(AGENT_SRC_IMAGE) $(MAKE) -f Makefile.e2e e2e-up
+
+## Mint (or fetch) a valid profiler token from the running studio.
+e2e-token:
+	@curl -sk $(NGINX)/api/api_key -u $(AUTH) \
+	  | python3 -c "import sys,json;print(json.load(sys.stdin)['apiKey'])"
+
+## Bring the whole stack up, then re-create the agent with a real token.
+e2e-up:
+	@echo ">> starting studio + sample app + agent (bootstrap token)"
+	$(COMPOSE) up -d --build
+	@echo ">> waiting for studio API..."
+	@for i in $$(seq 1 30); do \
+	  if curl -skf $(NGINX)/api/api_key -u $(AUTH) >/dev/null 2>&1; then break; fi; \
+	  sleep 2; \
+	done
+	@tok=$$(curl -sk $(NGINX)/api/api_key -u $(AUTH) | python3 -c "import sys,json;print(json.load(sys.stdin)['apiKey'])"); \
+	 echo ">> minting token: $$tok"; \
+	 GPROFILER_TOKEN=$$tok $(COMPOSE) up -d --force-recreate gprofiler-agent
+	@echo ">> up. Try: make -f Makefile.e2e e2e-status"
+
+## Show the agent's live inventory row.
+e2e-status:
+	@curl -sk "$(NGINX)/api/metrics/profiling/workload_status" -u $(AUTH) \
+	  | python3 -m json.tool
+
+## Submit a host-scope START for $(SERVICE) (auto-discovers the reporting host).
+e2e-start:
+	@host=$$(curl -sk "$(NGINX)/api/metrics/profiling/host_status?service_name=$(SERVICE)" -u $(AUTH) \
+	  | python3 -c "import sys,json;print(json.load(sys.stdin)['hosts'][0]['hostname'])"); \
+	 echo ">> start on host=$$host"; \
+	 curl -sk -X POST "$(NGINX)/api/metrics/profile_request" -u $(AUTH) -H "Content-Type: application/json" \
+	  -d "{\"service_name\":\"$(SERVICE)\",\"request_type\":\"start\",\"continuous\":false,\"duration\":30,\"frequency\":11,\"profiling_mode\":\"cpu\",\"target_scope\":\"host\",\"target_hosts\":{\"$$host\":[]},\"target_entities\":[{\"service_name\":\"$(SERVICE)\",\"hostname\":\"$$host\"}],\"additional_args\":{}}" \
+	 | python3 -m json.tool
+
+## Submit a host-scope STOP for $(SERVICE) (regression check: no PIDs at host level).
+e2e-stop:
+	@host=$$(curl -sk "$(NGINX)/api/metrics/profiling/host_status?service_name=$(SERVICE)" -u $(AUTH) \
+	  | python3 -c "import sys,json;print(json.load(sys.stdin)['hosts'][0]['hostname'])"); \
+	 echo ">> stop on host=$$host"; \
+	 curl -sk -X POST "$(NGINX)/api/metrics/profile_request" -u $(AUTH) -H "Content-Type: application/json" \
+	  -d "{\"service_name\":\"$(SERVICE)\",\"request_type\":\"stop\",\"continuous\":false,\"duration\":30,\"frequency\":11,\"profiling_mode\":\"cpu\",\"target_scope\":\"host\",\"stop_level\":\"host\",\"target_hosts\":{\"$$host\":[]},\"target_entities\":[{\"service_name\":\"$(SERVICE)\",\"hostname\":\"$$host\"}],\"additional_args\":{}}" \
+	 | python3 -m json.tool
+
+## List the flamegraph artifacts produced in (local)S3.
+e2e-flamegraph:
+	@docker run --rm --network $(NETWORK) \
+	  -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test -e AWS_DEFAULT_REGION=us-east-1 \
+	  amazon/aws-cli:2.15.0 --endpoint-url http://localstack:4566 \
+	  s3 ls s3://performance-studio-bucket/$${S3_PATH_PREFIX:+$${S3_PATH_PREFIX}/}products/$(SERVICE)/ --recursive
+
+e2e-agent-logs:
+	@docker logs -f gprofiler-ps-e2e-agent
+
+## Run the in-network acceptance suite (pytest) against the live stack.
+e2e-test:
+	$(COMPOSE) --profile test build e2e-tests
+	$(COMPOSE) --profile test run --rm e2e-tests
+
+## Run the Playwright UI acceptance suite (in-network, official browser image).
+e2e-ui-test:
+	$(COMPOSE) --profile ui build e2e-ui-tests
+	$(COMPOSE) --profile ui run --rm e2e-ui-tests
+
+## Remove only the harness-added services; studio keeps running.
+e2e-down:
+	$(COMPOSE) rm -sf gprofiler-agent e2e-sample-app e2e-tests e2e-ui-tests
+
+## Tear everything down (studio included). Destructive.
+e2e-down-all:
+	$(COMPOSE) down

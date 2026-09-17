@@ -1,0 +1,82 @@
+# The real gProfiler agent, one per node (prod shape). THIS is what the sandbox
+# exists to exercise: unlike docker-compose, a DaemonSet on a real node can read
+# the node's CRI socket and enumerate genuine k8s pods/containers.
+#
+# Why it lights up namespace/pod/container inventory (see the agent code):
+#   * granulate_utils CriClient talks to /run/containerd/containerd.sock, but it
+#     resolves that path under HOST_ROOT_PREFIX = /proc/1/root. With hostPID:true
+#     PID 1 is the host init, so /proc/1/root is the node root fs and the socket
+#     is reachable. privileged:true grants the access (and lets py-spy ptrace).
+#   * CRI returns the io.kubernetes.pod.{namespace,name,uid} + container.name
+#     labels that heartbeat_metadata.py turns into inventory rows.
+#   * get_process_container_id() maps every host PID to its container; hostPID
+#     is required to see PIDs outside the agent's own container.
+#
+# IMPORTANT: use the SOURCE-built agent image (make -f Makefile.k8s agent-build).
+# The container-inventory heartbeat is a fork feature; the public intel/gprofiler
+# image does not emit it, so the pod/container tabs would stay empty.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: gprofiler-agent
+  namespace: perf-studio
+  labels: { app: gprofiler-agent }
+spec:
+  selector:
+    matchLabels: { app: gprofiler-agent }
+  template:
+    metadata:
+      labels: { app: gprofiler-agent }
+    spec:
+      hostPID: true
+      containers:
+        - name: gprofiler-agent
+          image: gprofiler-e2e-agent:src
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+          command: ["/gprofiler"]
+          args:
+            - --server-host=http://webapp
+            - --api-server=http://webapp
+            - --token=$(GPROFILER_TOKEN)
+            - --service-name=k8s-sandbox
+            - --upload-results
+            - --enable-heartbeat-server
+            - --heartbeat-interval=10
+            - --perf-mode=none
+            - --output-dir=/tmp/gprofiler_output
+            - --dont-send-logs
+            - --disable-pidns-check
+            # Per-thread Java profiling: appends ',threads' to async-profiler so
+            # each sample is split by (and prefixed with) its JVM thread name
+            # (e.g. "Executor task launch worker-0"). This is the async-profiler
+            # "thread renaming in samples" capability surfaced via gProfiler.
+            - --java-async-profiler-args=threads
+            # Tag Spark executor samples with the Spark application name in the
+            # appid, so different Spark apps are distinguishable in the data.
+            - --java-collect-spark-app-name-as-appid
+          env:
+            - name: GPROFILER_IN_CONTAINER
+              value: "1"
+            - name: GPROFILER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: gprofiler-agent-token
+                  key: token
+            # The agent's own identity (downward API), reported alongside inventory.
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+            - name: POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            # bumped: per-thread collapsed output + a busy 6-executor Spark app
+            # produces a much larger profile to hold/merge.
+            limits: { cpu: "2", memory: 1Gi }
+      # Tolerate control-plane taints so the DaemonSet also lands on a
+      # single-node kind/minikube cluster's control-plane node.
+      tolerations:
+        - operator: Exists

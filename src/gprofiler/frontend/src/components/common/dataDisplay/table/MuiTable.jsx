@@ -50,6 +50,15 @@ const MuiTable = ({
     checkboxSelection = false,
     onSelectionModelChange = undefined,
     selectionModel = [],
+    paginationMode = 'client',
+    rowCount = undefined,
+    page = undefined,
+    onPageChange = undefined,
+    onPageSizeChange = undefined,
+    rowsPerPageOptions = [15, 25, 50, 100],
+    sortingMode = 'client',
+    sortModel = undefined,
+    onSortModelChange = undefined,
 }) => {
     const isDarkMode = variant !== 'light';
     const isSmallTableMode = size === 'small';
@@ -83,6 +92,15 @@ const MuiTable = ({
                 loading={isLoading}
                 autoHeight
                 pagination
+                paginationMode={paginationMode}
+                rowCount={rowCount}
+                page={page}
+                onPageChange={onPageChange}
+                onPageSizeChange={onPageSizeChange}
+                rowsPerPageOptions={rowsPerPageOptions}
+                sortingMode={sortingMode}
+                sortModel={sortModel}
+                onSortModelChange={onSortModelChange}
                 hideFooter={hideFooter}
                 pageSize={pageSize}
                 rowHeight={rowHeight}

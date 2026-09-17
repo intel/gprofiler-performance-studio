@@ -151,26 +151,41 @@ const StyledPopper = styled(Popper)({
     },
 });
 
-const FilterOptionsSelect = ({ disabled = false, loading, value, onChange, options }) => {
+const FilterOptionsSelect = ({ disabled = false, loading, value, onChange, options, freeSolo = false }) => {
     const [inputValue, setInputValue] = useState(value);
 
     useEffect(() => {
         setInputValue(value);
     }, [value]);
 
+    const commitValue = (newValue) => {
+        const name = typeof newValue === 'string' ? newValue : newValue?.name;
+        if (!name) {
+            return;
+        }
+        setInputValue(name);
+        onChange(name);
+    };
+
     return (
         <Autocomplete
+            freeSolo={freeSolo}
             disabled={disabled}
             PopperComponent={StyledPopper}
             ListboxComponent={ListboxComponent}
             value={value}
             inputValue={inputValue}
-            getOptionLabel={(option) => option?.name || ''}
+            getOptionLabel={(option) => (typeof option === 'string' ? option : option?.name || '')}
             isOptionEqualToValue={(option, value) => option.name === value}
             filterOptions={(options, { inputValue }) => options.filter((item) => item.name.includes(inputValue))}
             onInputChange={(event, value, reason) => {
                 if (event && event.type === 'blur') {
-                    setInputValue('');
+                    // In contains (free-text) mode keep the typed substring instead of clearing it.
+                    if (freeSolo && value) {
+                        commitValue(value);
+                    } else {
+                        setInputValue('');
+                    }
                 } else if (reason !== 'reset') {
                     setInputValue(value);
                 }
@@ -179,8 +194,7 @@ const FilterOptionsSelect = ({ disabled = false, loading, value, onChange, optio
                 if (!newValue || (event.type === 'keydown' && event.key === 'Backspace')) {
                     return;
                 }
-                setInputValue(newValue.name);
-                onChange(newValue.name);
+                commitValue(newValue);
             }}
             renderTags={() => null}
             noOptionsText={'no options'}

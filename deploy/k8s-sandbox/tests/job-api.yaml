@@ -1,0 +1,21 @@
+# Runs the real-topology acceptance suite (AT-K1..K5) in-cluster against the live
+# webapp Service. Recreate it each run (kubectl delete --ignore-not-found first).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k8s-acceptance
+  namespace: perf-studio
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: { app: k8s-acceptance }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: tests
+          image: gprofiler-ps/k8s-tests:sandbox
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: E2E_BASE_URL
+              value: http://webapp

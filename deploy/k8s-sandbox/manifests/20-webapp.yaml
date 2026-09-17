@@ -1,0 +1,86 @@
+# FastAPI backend + built UI: heartbeat ingest, profile upload, workload status
+# and profiling request APIs. Serves plain HTTP on :80 internally (TLS is left to
+# the optional nginx edge), so the agent and in-cluster tests reach it directly at
+# http://webapp without going through basic auth.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp
+  namespace: perf-studio
+  labels: { app: webapp }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: webapp }
+  template:
+    metadata:
+      labels: { app: webapp }
+    spec:
+      # The webapp image runs as non_root (uid 888) and binds port 80. Docker
+      # allows low-port binds by non-root via its default
+      # net.ipv4.ip_unprivileged_port_start=0; Kubernetes does not, so set the
+      # (safe) sysctl explicitly to reproduce that behavior.
+      securityContext:
+        sysctls:
+          - name: net.ipv4.ip_unprivileged_port_start
+            value: "0"
+      containers:
+        - name: webapp
+          image: gprofiler-ps/webapp:sandbox
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: { name: studio-config }
+          env:
+            - name: QUERY_API_BASE_URL
+              value: https://ch-rest-service:4433
+            - name: REST_VERIFY_TLS
+              value: "FALSE"
+            - name: REST_PASSWORD
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: REST_PASSWORD } }
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: AWS_ACCESS_KEY_ID } }
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: AWS_SECRET_ACCESS_KEY } }
+            # webapp reads Postgres via GPROFILER_POSTGRES_* (not the bare names).
+            - name: GPROFILER_POSTGRES_HOST
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_HOST } }
+            - name: GPROFILER_POSTGRES_PORT
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_PORT } }
+            - name: GPROFILER_POSTGRES_DB_NAME
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_DB } }
+            - name: GPROFILER_POSTGRES_USERNAME
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_USER } }
+            - name: GPROFILER_POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: POSTGRES_PASSWORD } }
+            - name: APP_LOG_LEVEL
+              value: INFO
+            - name: APP_LOG_FILE_PATH
+              value: webapp.log
+            - name: AWS_METADATA_SERVICE_NUM_ATTEMPTS
+              value: "100"
+            # TLS off internally: no cert paths -> webapp serves plain HTTP on :80.
+            - name: GPROFILER_TLS_CERT_PATH
+              value: ""
+            - name: GPROFILER_TLS_KEY_PATH
+              value: ""
+            - name: GPROFILER_TLS_CA_PATH
+              value: ""
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webapp
+  namespace: perf-studio
+spec:
+  selector: { app: webapp }
+  ports:
+    - port: 80
+      targetPort: 80

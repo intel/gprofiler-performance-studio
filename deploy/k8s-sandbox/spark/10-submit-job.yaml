@@ -1,0 +1,67 @@
+# A one-shot pod that runs spark-submit in k8s "cluster" deploy mode. spark-submit
+# creates the driver pod, which in turn creates the executor pods. Cluster mode is
+# used because Spark then wires driver<->executor networking automatically (it
+# creates a headless service for the driver), avoiding client-mode host/port setup.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: spark-submit
+  namespace: spark
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: spark-submit
+    spec:
+      serviceAccountName: spark
+      restartPolicy: Never
+      containers:
+        - name: submit
+          image: spark-cpu-job:sandbox
+          imagePullPolicy: IfNotPresent
+          command:
+            - /opt/spark/bin/spark-submit
+            - --master
+            - k8s://https://kubernetes.default.svc:443
+            - --deploy-mode
+            - cluster
+            - --name
+            - spark-cpu
+            - --conf
+            - spark.kubernetes.namespace=spark
+            - --conf
+            - spark.kubernetes.authenticate.driver.serviceAccountName=spark
+            - --conf
+            - spark.kubernetes.authenticate.submission.caCertFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            - --conf
+            - spark.kubernetes.authenticate.submission.oauthTokenFile=/var/run/secrets/kubernetes.io/serviceaccount/token
+            - --conf
+            - spark.kubernetes.container.image=spark-cpu-job:sandbox
+            - --conf
+            - spark.kubernetes.container.image.pullPolicy=IfNotPresent
+            - --conf
+            - spark.kubernetes.driver.pod.name=spark-cpu-driver
+            - --conf
+            - spark.kubernetes.submission.waitAppCompletion=true
+            - --conf
+            - spark.executor.instances=6
+            - --conf
+            - spark.executor.cores=4
+            # Decouple task parallelism from the k8s CPU *request* so all 6 executor
+            # pods schedule on a 16-core node (6x4=24 threads > 16 cores => oversubscribed
+            # and deliberately very busy), instead of requesting 4 cores each and leaving
+            # half the executors Pending.
+            - --conf
+            - spark.kubernetes.executor.request.cores=1
+            - --conf
+            - spark.executor.memory=1g
+            - --conf
+            - spark.driver.cores=1
+            - --conf
+            - spark.driver.memory=1g
+            # keep executors around briefly after finish so they're easy to inspect
+            - --conf
+            - spark.kubernetes.executor.deleteOnTermination=true
+            - local:///opt/spark_cpu_job.py
+            - "600"

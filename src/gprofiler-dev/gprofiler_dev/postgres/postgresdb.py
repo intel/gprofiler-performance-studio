@@ -60,6 +60,43 @@ class PostgresDB:
         with self._conn_lock:
             yield self._thread_unsafe_conn
 
+    @contextmanager
+    def transaction(self, return_dict: bool = False):
+        """Run multiple statements on a single connection within one transaction.
+
+        Yields a cursor; commits on success, rolls back on any exception. Use this
+        when a logical write spans several statements that must be atomic (e.g. a
+        parent upsert followed by dependent child writes).
+
+        Unlike ``execute`` this does not retry mid-transaction (a context manager
+        can only yield once), so it probes the connection up front and reconnects
+        once if it is dead before handing out the cursor.
+        """
+        with self._conn_lock:
+            with self.get_locked_conn() as current_conn:
+                try:
+                    if current_conn.closed:
+                        self._reconnect()
+                        current_conn = self._thread_unsafe_conn
+                except Exception:
+                    self._reconnect()
+                    current_conn = self._thread_unsafe_conn
+
+                cursor = current_conn.cursor(
+                    cursor_factory=psycopg2.extras.RealDictCursor if return_dict else None
+                )
+                try:
+                    yield cursor
+                    current_conn.commit()
+                except Exception:
+                    try:
+                        current_conn.rollback()
+                    except Exception:
+                        pass
+                    raise
+                finally:
+                    cursor.close()
+
     @staticmethod
     def _execute(
         cursor,

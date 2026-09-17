@@ -1,0 +1,63 @@
+# LocalStack emulates S3 + SQS in-process so nothing touches real AWS. On startup
+# it runs every script in /etc/localstack/init/ready.d (mounted from a ConfigMap
+# the Makefile builds from deploy/localstack_init/) to create the bucket + queue
+# and wire S3 -> SQS event notifications, exactly like the compose harness.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: localstack
+  namespace: perf-studio
+  labels: { app: localstack }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: localstack }
+  template:
+    metadata:
+      labels: { app: localstack }
+    spec:
+      containers:
+        - name: localstack
+          image: localstack/localstack:3.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SERVICES
+              value: s3,sqs
+            - name: DEBUG
+              value: "1"
+            - name: AWS_DEFAULT_REGION
+              value: us-east-1
+            - name: AWS_ACCESS_KEY_ID
+              value: test
+            - name: AWS_SECRET_ACCESS_KEY
+              value: test
+          ports:
+            - containerPort: 4566
+          volumeMounts:
+            - name: init
+              mountPath: /etc/localstack/init/ready.d
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - "curl -s http://localhost:4566/_localstack/health | grep -q '\"s3\": \"running\"' && curl -s http://localhost:4566/_localstack/health | grep -q '\"sqs\": \"running\"'"
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 12
+      volumes:
+        - name: init
+          configMap:
+            name: localstack-init
+            defaultMode: 0755
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: localstack
+  namespace: perf-studio
+spec:
+  selector: { app: localstack }
+  ports:
+    - port: 4566
+      targetPort: 4566

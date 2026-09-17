@@ -148,4 +148,5 @@ export const FILTER_OPERATIONS = {
 export const FILTER_EQUALNESS = {
     $eq: { value: '$eq', display: 'Is' },
     $neq: { value: '$neq', display: 'Is not' },
+    $like: { value: '$like', display: 'Contains' },
 };

@@ -38,6 +38,10 @@ PROFILER_PROCESSES_LRU_CACHE_LIMIT = os.getenv("PROFILER_PROCESSES_LRU_CACHE_LIM
 
 BUCKET_NAME = os.getenv("BUCKET_NAME", "gprofiler")
 BASE_DIRECTORY = "products"
+# Optional prefix prepended to every S3 key; empty = no prefix (default)
+S3_PATH_PREFIX = os.getenv("S3_PATH_PREFIX", "").strip("/")
 # Optional: Custom S3 endpoint for local testing (e.g., LocalStack) or S3-compatible services
 # In production, leave unset to use default AWS S3 endpoints
 S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
+
+ACTIVE_HOST_HEARTBEAT_MAX_DELTA_HOURS = int(os.getenv("ACTIVE_HOST_HEARTBEAT_MAX_DELTA_HOURS", 24))

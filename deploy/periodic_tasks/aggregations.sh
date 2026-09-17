@@ -17,4 +17,13 @@
 #
 
 echo "aggregation started"
+# cron jobs do not inherit the container env; load the DB connection vars the
+# container start-up persisted (see periodic_tasks/Dockerfile).
+if [ -f /tmp/cron.env ]; then
+    while IFS='=' read -r _k _v; do
+        case "$_k" in
+            PGHOST|PGPORT|PGUSER|PGPASSWORD|PGDATABASE) export "$_k=$_v" ;;
+        esac
+    done < /tmp/cron.env
+fi
 psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -c "CALL update_profiler_service_hourly_usages()"

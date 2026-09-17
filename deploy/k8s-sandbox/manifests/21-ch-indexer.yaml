@@ -1,0 +1,85 @@
+# SQS consumer: reads uploaded profiles from S3 (LocalStack) and writes rows to
+# ClickHouse (flamedb.samples) plus the flamegraph HTML back to S3. This is the
+# tail of the pipeline the compose "studio-only" setup never exercises.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ch-indexer
+  namespace: perf-studio
+  labels: { app: ch-indexer }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: ch-indexer }
+  template:
+    metadata:
+      labels: { app: ch-indexer }
+    spec:
+      # Compose gated the indexer on `localstack: service_healthy`; k8s has no
+      # depends_on, and the indexer resolves the SQS queue URL once at startup and
+      # does not retry. Without this wait it can boot before LocalStack is up,
+      # fail queue resolution, and silently never consume. Block until the SQS
+      # emulator reports running.
+      initContainers:
+        - name: wait-for-localstack
+          image: curlimages/curl:8.7.1
+          command:
+            - sh
+            - -c
+            - |
+              until curl -sf http://localstack:4566/_localstack/health | grep -q '"sqs": "running"'; do
+                echo "waiting for localstack sqs..."; sleep 3;
+              done
+      containers:
+        - name: ch-indexer
+          image: gprofiler-ps/ch-indexer:sandbox
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SQS_QUEUE_URL
+              valueFrom: { configMapKeyRef: { name: studio-config, key: SQS_INDEXER_QUEUE_URL } }
+            - name: AWS_REGION
+              valueFrom: { configMapKeyRef: { name: studio-config, key: AWS_REGION } }
+            - name: AWS_ENDPOINT_URL
+              valueFrom: { configMapKeyRef: { name: studio-config, key: AWS_ENDPOINT_URL } }
+            - name: S3_BUCKET
+              valueFrom: { configMapKeyRef: { name: studio-config, key: BUCKET_NAME } }
+            - name: S3_PATH_PREFIX
+              valueFrom: { configMapKeyRef: { name: studio-config, key: S3_PATH_PREFIX } }
+            - name: CLICKHOUSE_HOST
+              valueFrom: { configMapKeyRef: { name: studio-config, key: CLICKHOUSE_HOST } }
+            - name: CLICKHOUSE_USER
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: CLICKHOUSE_USER } }
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: CLICKHOUSE_PASSWORD } }
+            - name: CLICKHOUSE_ADDR
+              value: "$(CLICKHOUSE_HOST):9000"
+            - name: CLICKHOUSE_USE_TLS
+              value: "false"
+            - name: CLICKHOUSE_STACKS_TABLE
+              value: flamedb.samples
+            - name: CLICKHOUSE_METRICS_TABLE
+              value: flamedb.metrics
+            - name: CLICKHOUSE_STACKS_BATCH_SIZE
+              value: "100000"
+            - name: CLICKHOUSE_METRICS_BATCH_SIZE
+              value: "1000"
+            - name: CONCURRENCY
+              value: "8"
+            - name: CACHE_SIZE
+              value: "2048"
+            - name: INDEXER_METRICS_ENABLED
+              valueFrom: { configMapKeyRef: { name: studio-config, key: INDEXER_METRICS_ENABLED } }
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: AWS_ACCESS_KEY_ID } }
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: AWS_SECRET_ACCESS_KEY } }
+            - name: GPROFILER_POSTGRES_HOST
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_HOST } }
+            - name: GPROFILER_POSTGRES_PORT
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_PORT } }
+            - name: GPROFILER_POSTGRES_DB_NAME
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_DB } }
+            - name: GPROFILER_POSTGRES_USERNAME
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_USER } }
+            - name: GPROFILER_POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: POSTGRES_PASSWORD } }

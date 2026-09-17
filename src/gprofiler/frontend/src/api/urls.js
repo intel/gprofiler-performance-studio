@@ -33,6 +33,9 @@ export const DATA_URLS = {
     GET_METRICS_CPU_AND_MEMORY_TREND: `${API_PREFIX}/metrics/cpu_trend`,
     GET_NODES_AND_CORES: `${API_PREFIX}/metrics/nodes_cores/summary`,
     GET_LAST_HTML: `${API_PREFIX}/metrics/html_metadata`,
+    GET_ADHOC_FLAMEGRAPHS: `${API_PREFIX}/metrics/adhoc_flamegraphs`,
+    GET_ADHOC_FLAMEGRAPH_CONTENT: `${API_PREFIX}/metrics/adhoc_flamegraph_content`,
+    GET_PERFSPECT_REPORT_DOWNLOAD: `${API_PREFIX}/perfspect/download_report`,
     GET_INSTANCE_TYPE: `${API_PREFIX}/metrics/instance_type_count`,
     GET_GRAPH_METRICS: `${API_PREFIX}/metrics/graph`,
     GET_FUCNTION_CPU_GRAPH: `${API_PREFIX}/metrics/function_cpu`,
@@ -41,12 +44,11 @@ export const DATA_URLS = {
     GET_API_KEY: `${API_PREFIX}/api_key`,
     // Profiling endpoints
     GET_PROFILING_HOST_STATUS: `${API_PREFIX}/metrics/profiling/host_status`,
+    GET_PROFILING_WORKLOAD_STATUS: `${API_PREFIX}/metrics/profiling/workload_status`,
     POST_PROFILING_REQUEST: `${API_PREFIX}/metrics/profile_request`,
+    POST_PROFILING_REQUEST_BULK: `${API_PREFIX}/metrics/profile_request/bulk`,
     POST_HEARTBEAT: `${API_PREFIX}/metrics/heartbeat`,
     POST_COMMAND_COMPLETION: `${API_PREFIX}/metrics/command_completion`,
-    // Adhoc flamegraph endpoints
-    GET_ADHOC_FLAMEGRAPHS: `${API_PREFIX}/metrics/adhoc_flamegraphs`,
-    GET_ADHOC_FLAMEGRAPH_CONTENT: `${API_PREFIX}/metrics/adhoc_flamegraph_content`,
     // Filter endpoints
     FILTERS: `${API_PREFIX}${FILETERS_PREFIX}`,
     GET_FILTER_OPTIONS_VALUE: (filterType, params) =>

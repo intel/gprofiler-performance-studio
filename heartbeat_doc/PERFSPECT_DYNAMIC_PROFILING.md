@@ -73,7 +73,7 @@ This feature addresses the need for comprehensive performance analysis by combin
 ```bash
 # Test Case: Create profiling request with PerfSpect enabled
 curl -X POST http://localhost:8080/api/metrics/profile_request \
-  -u "username:password" \
+  -u "prashantpatel:password" \
   -H "Content-Type: application/json" \
   -d '{
     "service_name": "test-service-2",

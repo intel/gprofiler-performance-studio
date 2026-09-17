@@ -1,0 +1,163 @@
+# Realistic tenant workloads the agent DaemonSet enumerates over CRI. These give
+# the inventory genuine namespace/pod/container/process topology:
+#   team-a: checkout (2 replicas), web
+#   team-b: payments, search (2-container pod: app + sidecar)
+# Each container runs a deterministic CPU hot loop so py-spy produces stable,
+# recognizable frames. kubelet stamps every container with the
+# io.kubernetes.pod.{namespace,name,uid} + io.kubernetes.container.name labels
+# that heartbeat_metadata.py reads, so no in-app cooperation is required.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  namespace: team-a
+  labels: { app.kubernetes.io/name: checkout }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app.kubernetes.io/name: checkout }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: checkout }
+    spec:
+      containers:
+        - name: checkout
+          image: python:3.11-slim
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-c"]
+          args:
+            - |
+              import time
+              def hot_loop():
+                  total = 0
+                  for i in range(5_000_000):
+                      total += (i * i) % 7
+                  return total
+              while True:
+                  hot_loop()
+                  time.sleep(0.01)
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: team-a
+  labels: { app.kubernetes.io/name: web }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: web }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: web }
+    spec:
+      containers:
+        - name: web
+          image: python:3.11-slim
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-c"]
+          args:
+            - |
+              import time
+              def serve():
+                  total = 0
+                  for i in range(3_000_000):
+                      total += (i * i) % 5
+                  return total
+              while True:
+                  serve()
+                  time.sleep(0.02)
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments
+  namespace: team-b
+  labels: { app.kubernetes.io/name: payments }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: payments }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: payments }
+    spec:
+      containers:
+        - name: payments
+          image: python:3.11-slim
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-c"]
+          args:
+            - |
+              import time
+              def settle():
+                  total = 0
+                  for i in range(4_000_000):
+                      total += (i * i) % 11
+                  return total
+              while True:
+                  settle()
+                  time.sleep(0.01)
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+---
+# Multi-container pod: proves container-scope resolution can distinguish two
+# containers inside the same pod.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search
+  namespace: team-b
+  labels: { app.kubernetes.io/name: search }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: search }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: search }
+    spec:
+      containers:
+        - name: search-app
+          image: python:3.11-slim
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-c"]
+          args:
+            - |
+              import time
+              def index():
+                  total = 0
+                  for i in range(4_500_000):
+                      total += (i * i) % 13
+                  return total
+              while True:
+                  index()
+                  time.sleep(0.01)
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+        - name: search-sidecar
+          image: python:3.11-slim
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-c"]
+          args:
+            - |
+              import time
+              def tail():
+                  total = 0
+                  for i in range(1_000_000):
+                      total += (i * i) % 3
+                  return total
+              while True:
+                  tail()
+                  time.sleep(0.05)
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits: { cpu: 100m, memory: 64Mi }

@@ -79,7 +79,7 @@ def get_flamegraph_response(
     metadata: str = None,
     stream=False,
 ):
-    fg_filter = fg_params.filter.json().encode() if fg_params.filter else None
+    fg_filter = fg_params.filter.flamedb_filter_json() if fg_params.filter else None
     db_api_params = get_api_params(
         fg_params.service_name,
         fg_params.start_time,
@@ -139,7 +139,7 @@ def _common_fg_rest_response(response: Response, db_api_params: Dict) -> Union[L
 def get_query_response(
     fg_params: FGParamsBaseModel, lookup_for: str = "time", resolution=None, interval=None
 ) -> Union[List, Dict, str]:
-    fg_filter = fg_params.filter.json().encode() if fg_params.filter else None
+    fg_filter = fg_params.filter.flamedb_filter_json() if fg_params.filter else None
     db_api_params = get_api_params(
         fg_params.service_name,
         fg_params.start_time,
@@ -170,7 +170,7 @@ def get_metrics_response(
     compared_start_datetime=None,
     compared_end_datetime=None,
 ) -> Union[List, Dict, str]:
-    fg_filter = fg_params.filter.json().encode() if fg_params.filter else None
+    fg_filter = fg_params.filter.flamedb_filter_json() if fg_params.filter else None
     db_api_params = get_api_params(
         fg_params.service_name,
         fg_params.start_time,
