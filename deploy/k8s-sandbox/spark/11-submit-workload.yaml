@@ -1,0 +1,73 @@
+# Templated spark-submit Job for ONE workload mode. The Makefile `spark-multi`
+# target sed-substitutes the __PLACEHOLDERS__ and applies one copy per mode, so
+# several distinct Spark apps run side by side. Each app is smaller than the
+# single-app demo (2 executors x 2 cores) so 3-4 apps fit on the 16-core node.
+#
+# Placeholders: __SUFFIX__ (mode), __MODE__, __APPNAME__, __SECONDS__
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: spark-submit-__SUFFIX__
+  namespace: spark
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: spark-submit
+        workload: __SUFFIX__
+    spec:
+      serviceAccountName: spark
+      restartPolicy: Never
+      containers:
+        - name: submit
+          image: spark-cpu-job:sandbox
+          imagePullPolicy: IfNotPresent
+          command:
+            - /opt/spark/bin/spark-submit
+            - --master
+            - k8s://https://kubernetes.default.svc:443
+            - --deploy-mode
+            - cluster
+            - --name
+            - __APPNAME__
+            - --conf
+            - spark.kubernetes.namespace=spark
+            - --conf
+            - spark.kubernetes.authenticate.driver.serviceAccountName=spark
+            - --conf
+            - spark.kubernetes.authenticate.submission.caCertFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            - --conf
+            - spark.kubernetes.authenticate.submission.oauthTokenFile=/var/run/secrets/kubernetes.io/serviceaccount/token
+            - --conf
+            - spark.kubernetes.container.image=spark-cpu-job:sandbox
+            - --conf
+            - spark.kubernetes.container.image.pullPolicy=IfNotPresent
+            - --conf
+            - spark.kubernetes.driver.pod.name=spark-__SUFFIX__-driver
+            # Label the executor pods so `kubectl get pods -l workload=<mode>` groups them.
+            - --conf
+            - spark.kubernetes.executor.label.workload=__SUFFIX__
+            - --conf
+            - spark.kubernetes.submission.waitAppCompletion=true
+            # Per-app footprint kept small so several apps schedule concurrently:
+            # 2 executors x 2 cores = 4 task threads/app, but request only 1 core each.
+            - --conf
+            - spark.executor.instances=2
+            - --conf
+            - spark.executor.cores=2
+            - --conf
+            - spark.kubernetes.executor.request.cores=1
+            - --conf
+            - spark.executor.memory=1g
+            - --conf
+            - spark.driver.cores=1
+            - --conf
+            - spark.driver.memory=1g
+            - --conf
+            - spark.kubernetes.executor.deleteOnTermination=true
+            - local:///opt/spark_workloads.py
+            - __MODE__
+            - "__SECONDS__"
+            - __APPNAME__
+            - "__PARTS__"

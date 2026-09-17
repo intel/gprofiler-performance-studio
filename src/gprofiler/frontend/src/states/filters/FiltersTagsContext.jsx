@@ -17,7 +17,7 @@
 }
 
 import _ from 'lodash';
-import { createContext, useCallback, useContext, useEffect, useReducer, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState } from 'react';
 
 import useGetServiceFilters from '../../api/filters/useGetServiceFilters';
 import useMainFiltersQueryParams from '../../hooks/useMainFiltersQueryParams';
@@ -87,11 +87,20 @@ export const FilterTagsContextProvider = ({ children }) => {
         }
     }, [dispatchFilterTags, activeFilterTag]);
 
+    // Clear filters only when the user switches to a *different* service, not on
+    // the initial selection — otherwise a deep link's URL filters get wiped before
+    // they are applied.
+    const previousServiceRef = useRef(undefined);
     useEffect(() => {
-        if (selectedService) {
+        if (
+            selectedService &&
+            previousServiceRef.current !== undefined &&
+            previousServiceRef.current !== selectedService
+        ) {
             setActiveFilterTag(undefined);
             dispatchFilterTags({ type: FILTER_TAGS_ACTIONS.CLEAR });
         }
+        previousServiceRef.current = selectedService;
     }, [selectedService]);
 
     return (
@@ -149,7 +158,6 @@ const reducer = (state, action) => {
                     [operation]: rules2.map((rule, ruleIndex) => {
                         if (ruleIndex === index) {
                             const [, subItem] = Object.entries(rule)[0];
-
                             const [equal, value] = Object.entries(subItem)[0];
                             return { [payload]: { [equal]: '' } };
                         }

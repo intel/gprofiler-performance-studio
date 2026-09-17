@@ -33,6 +33,8 @@ import {
     sub,
 } from 'date-fns';
 
+import { getDateLocale } from './localeUtils';
+
 export const TIME_UNITS = {
     minutes: 'minutes',
     seconds: 'seconds',
@@ -42,15 +44,15 @@ export const TIME_UNITS = {
 
 export const TIME_FORMATS = {
     DATETIME_BASIC: `yyyy-MM-dd'T'HH:mm:00`,
-    DATETIME_PRINTED: 'dd/MM/yyyy HH:mm',
-    DATETIME_WITH_SECONDS: 'dd/MM/yyyy HH:mm:ss',
-    DATE_BASIC: 'dd/MM/yyyy',
+    DATETIME_PRINTED: 'Pp',
+    DATETIME_WITH_SECONDS: 'PPpp',
+    DATE_BASIC: 'P',
+    TIME_LOCALE: 'p',
     TIME_24H: 'HH:mm',
 };
 
-// Datetime formatting
 export const formatDate = (date, toFormat = TIME_FORMATS.DATETIME_BASIC) => {
-    return format(date, toFormat);
+    return format(date, toFormat, { locale: getDateLocale() });
 };
 
 export const localDatetimeToUtc = (datetime) => {
@@ -130,5 +132,5 @@ export const isDateYesterday = (date) => {
 
 // Datetimes creation
 export const getCurrentTime = () => {
-    return formatDate(new Date(), TIME_FORMATS.TIME_24H);
+    return formatDate(new Date(), TIME_FORMATS.TIME_LOCALE);
 };

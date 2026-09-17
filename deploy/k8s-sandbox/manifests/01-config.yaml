@@ -1,0 +1,50 @@
+# Shared, non-secret configuration for the studio control plane.
+# Mirrors deploy/.env, but with Kubernetes service DNS names instead of the
+# docker-compose service names (k8s Service names cannot contain underscores,
+# so db_postgres -> postgres and db_clickhouse -> clickhouse). Each app already
+# takes its dependency hosts via env, so only these values change.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: studio-config
+  namespace: perf-studio
+data:
+  AWS_REGION: us-east-1
+  AWS_DEFAULT_REGION: us-east-1
+  # LocalStack gateway (S3 + SQS emulator) reachable in-cluster by Service name.
+  AWS_ENDPOINT_URL: http://localstack:4566
+  S3_ENDPOINT_URL: http://localstack:4566
+  SQS_ENDPOINT_URL: http://localstack:4566
+  BUCKET_NAME: performance-studio-bucket
+  S3_PATH_PREFIX: ""
+  # The indexer takes a bare queue name; the webapp takes a full URL. Path-style
+  # LocalStack URL works cross-pod (the localhost.localstack.cloud magic DNS the
+  # compose .env used only resolves on the host).
+  SQS_INDEXER_QUEUE_URL: performance-studio-queue
+  SQS_WEBAPP_QUEUE_URL: http://localstack:4566/000000000000/performance-studio-queue
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: performance_studio
+  POSTGRES_USER: performance_studio
+  CLICKHOUSE_HOST: clickhouse
+  REST_USERNAME: user
+  COMMON_LOGS_DIR: /logs
+  # No external metrics sink in the sandbox (compose pointed at host.docker.internal).
+  METRICS_ENABLED: "false"
+  INDEXER_METRICS_ENABLED: "false"
+  MAX_SIMULTANEOUS_PROFILING_HOSTS: "100"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: studio-secrets
+  namespace: perf-studio
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: performance_studio_password
+  CLICKHOUSE_USER: dbuser
+  CLICKHOUSE_PASSWORD: simplePassword
+  REST_PASSWORD: pass
+  # Dummy credentials; all AWS traffic is served by LocalStack.
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test

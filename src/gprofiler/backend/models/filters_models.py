@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 
+import json
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -35,6 +36,7 @@ class FilterTypes(str, Enum):
 class RQLCompareOperators(str, Enum):
     eq_op = "$eq"
     neq_op = "$neq"
+    like_op = "$like"
 
 
 class RQLLogicOperators(str, Enum):
@@ -59,6 +61,31 @@ class RQLFilter(CamelModel):
                         res.append("_".join([key, cmp_op, value]))
                 res.append(logic_op)
         return "__".join(res[:-1]).replace("$", "")
+
+    def flamedb_filter_json(self) -> bytes:
+        """Serialize the filter for the query service, wrapping each ``$like`` value in
+        ``%…%`` so it performs substring matching. The stored/displayed value stays raw;
+        only the copy sent to flamedb gets wildcards.
+        """
+
+        def _key(item: Any) -> str:
+            return item.value if isinstance(item, Enum) else str(item)
+
+        out_filter: Dict[str, Any] = {}
+        for logic_op, expressions in self.filter.items():
+            new_expressions = []
+            for expression in expressions:
+                new_expression: Dict[str, Any] = {}
+                for key, cmp_op_value in expression.items():
+                    new_cmp: Dict[str, Any] = {}
+                    for cmp_op, value in cmp_op_value.items():
+                        if _key(cmp_op) == RQLCompareOperators.like_op.value and value and "%" not in value:
+                            value = f"%{value}%"
+                        new_cmp[_key(cmp_op)] = value
+                    new_expression[_key(key)] = new_cmp
+                new_expressions.append(new_expression)
+            out_filter[_key(logic_op)] = new_expressions
+        return json.dumps({"filter": out_filter}).encode()
 
     class Config:
         @staticmethod

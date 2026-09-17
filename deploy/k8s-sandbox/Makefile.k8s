@@ -1,0 +1,329 @@
+# Kubernetes sandbox for Performance Studio + a REAL gProfiler agent DaemonSet.
+#
+# This is the k8s-native counterpart of deploy/Makefile.e2e. Its reason to exist:
+# a DaemonSet on a real node reads the node's CRI socket and enumerates genuine
+# pods/containers, so it proves the workload/pod/container scope resolution that
+# docker-compose cannot (compose has no container runtime -> empty inventory).
+#
+# One-shot:
+#   make -f Makefile.k8s k8s-all          # cluster + build + load + deploy + token
+#   make -f Makefile.k8s k8s-test         # run AT-K1..K5 real-topology acceptance
+#   make -f Makefile.k8s spark-demo       # one Spark app + per-thread flamegraph
+#   make -f Makefile.k8s spark-multi-demo # several distinct Spark apps (relative weight)
+#   make -f Makefile.k8s k8s-down-all     # delete the whole cluster
+#
+# Granular targets are listed in `make -f Makefile.k8s help`.
+
+SHELL := /bin/bash
+
+# kind (default, recommended for CI: lighter, containerd-native) or minikube.
+CLUSTER      ?= kind
+CLUSTER_NAME ?= gprofiler-sandbox
+NS           ?= perf-studio
+
+# Source-built agent (the container-inventory heartbeat is a fork feature, so the
+# public image would leave pod/container tabs empty). Mirrors Makefile.e2e.
+AGENT_REPO   ?= ../../../gprofiler
+AGENT_ARCH   ?= x86_64
+AGENT_IMAGE  ?= gprofiler-e2e-agent:src
+
+VITE_DOCUMENTATION_URL ?= http://custom.gprofiler.doc.domain/
+
+# Locally-built studio images (referenced by the manifests with the same tags).
+STUDIO_IMAGES := \
+  gprofiler-ps/webapp:sandbox \
+  gprofiler-ps/ch-rest-service:sandbox \
+  gprofiler-ps/ch-indexer:sandbox \
+  gprofiler-ps/agents-logs-backend:sandbox \
+  gprofiler-ps/periodic-tasks:sandbox
+TESTS_IMAGE := gprofiler-ps/k8s-tests:sandbox
+
+KUBECTL := kubectl -n $(NS)
+
+.PHONY: help k8s-all k8s-cluster k8s-images k8s-agent-build k8s-load k8s-config \
+        k8s-deploy k8s-token k8s-up k8s-status k8s-test k8s-start k8s-stop \
+        k8s-flamegraph k8s-logs k8s-ui k8s-url k8s-down k8s-down-all
+
+help:
+	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/^## //'
+
+## k8s-all         : cluster + images + agent + load + deploy + token (one-shot)
+k8s-all: k8s-cluster k8s-images k8s-agent-build k8s-load k8s-up
+	@echo ">> sandbox ready. Try: make -f Makefile.k8s k8s-status"
+
+## k8s-cluster     : create the local cluster (CLUSTER=kind|minikube)
+k8s-cluster:
+ifeq ($(CLUSTER),kind)
+	@kind get clusters 2>/dev/null | grep -qx $(CLUSTER_NAME) \
+	  && echo ">> kind cluster $(CLUSTER_NAME) already exists" \
+	  || kind create cluster --name $(CLUSTER_NAME) --config kind-config.yaml
+else ifeq ($(CLUSTER),minikube)
+	@minikube status -p $(CLUSTER_NAME) >/dev/null 2>&1 \
+	  && echo ">> minikube profile $(CLUSTER_NAME) already running" \
+	  || minikube start -p $(CLUSTER_NAME) --container-runtime=containerd --ports=30443:30443
+else
+	@echo "Unsupported CLUSTER=$(CLUSTER) (use kind or minikube)"; exit 1
+endif
+
+## k8s-images      : build the studio + test images from source
+k8s-images:
+	@echo ">> building studio images from source"
+	docker build -t gprofiler-ps/webapp:sandbox \
+	  -f ../../src/gprofiler/Dockerfile \
+	  --build-arg VITE_DOCUMENTATION_URL=$(VITE_DOCUMENTATION_URL) ../../src
+	docker build -t gprofiler-ps/ch-rest-service:sandbox ../../src/gprofiler_flamedb_rest
+	docker build -t gprofiler-ps/ch-indexer:sandbox ../../src/gprofiler_indexer
+	docker build -t gprofiler-ps/agents-logs-backend:sandbox \
+	  -f ../../src/gprofiler_logging/Dockerfile ../../src
+	docker build -t gprofiler-ps/periodic-tasks:sandbox ../periodic_tasks
+	@echo ">> building k8s acceptance test image (context = studio root)"
+	docker build -f tests/Dockerfile -t $(TESTS_IMAGE) ../..
+
+## k8s-agent-build  : build the agent FROM SOURCE (fast, glibc-wrapped)
+k8s-agent-build:
+	@echo ">> building agent executable from source (--fast, no staticx)"
+	cd $(AGENT_REPO) && scripts/build_$(AGENT_ARCH)_executable.sh --fast
+	@echo ">> wrapping exe in glibc base -> $(AGENT_IMAGE)"
+	docker build -f ../e2e/agent-glibc.Dockerfile --build-arg ARCH=$(AGENT_ARCH) -t $(AGENT_IMAGE) $(AGENT_REPO)
+
+## k8s-load        : load all locally-built images into the cluster
+k8s-load:
+	@for img in $(STUDIO_IMAGES) $(TESTS_IMAGE) $(AGENT_IMAGE); do \
+	  echo ">> loading $$img"; \
+	  if [ "$(CLUSTER)" = "kind" ]; then \
+	    kind load docker-image $$img --name $(CLUSTER_NAME); \
+	  else \
+	    minikube image load $$img -p $(CLUSTER_NAME); \
+	  fi; \
+	done
+
+## k8s-config      : create ConfigMaps/Secrets from the existing deploy/ files
+k8s-config:
+	$(KUBECTL) apply -f manifests/00-namespaces.yaml
+	$(KUBECTL) apply -f manifests/01-config.yaml
+	@echo ">> schema + init ConfigMaps (single source of truth with compose)"
+	$(KUBECTL) create configmap pg-initdb \
+	  --from-file=create_scheme.sql=../../scripts/setup/postgres/gprofiler_recreate.sql \
+	  --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(KUBECTL) create configmap ch-initdb \
+	  --from-file=create_schema.sql=../../src/gprofiler_indexer/sql/create_ch_schema.sql \
+	  --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(KUBECTL) create configmap localstack-init \
+	  --from-file=../localstack_init \
+	  --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	@echo ">> TLS + nginx edge inputs"
+	$(KUBECTL) create secret generic ch-rest-tls \
+	  --from-file=ch_rest_cert.pem=../tls/ch_rest_cert.pem \
+	  --from-file=ch_rest_key.pem=../tls/ch_rest_key.pem \
+	  --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(KUBECTL) create configmap nginx-conf \
+	  --from-file=nginx.conf=../https_nginx.conf \
+	  --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(KUBECTL) create secret generic nginx-tls \
+	  --from-file=cert.pem=../tls/cert.pem --from-file=key.pem=../tls/key.pem \
+	  --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(KUBECTL) create secret generic nginx-htpasswd \
+	  --from-file=.htpasswd=../.htpasswd \
+	  --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	@echo ">> placeholder agent token (replaced by k8s-token)"
+	$(KUBECTL) create secret generic gprofiler-agent-token \
+	  --from-literal=token=bootstrap \
+	  --dry-run=client -o yaml | $(KUBECTL) apply -f -
+
+## k8s-deploy      : apply all manifests (core stack + workloads + agent)
+k8s-deploy:
+	$(KUBECTL) apply -f manifests/
+	@echo ">> waiting for the webapp to become ready..."
+	$(KUBECTL) rollout status deploy/webapp --timeout=300s
+
+## k8s-token       : mint a real profiler token and restart the agent with it
+k8s-token:
+	@echo ">> minting profiler token from the running studio"
+	@tok=$$($(KUBECTL) run tokfetch-$$RANDOM --image=curlimages/curl:8.7.1 \
+	  --restart=Never -i --rm --quiet --command -- \
+	  curl -s http://webapp/api/api_key \
+	  | python3 -c "import sys,json;print(json.load(sys.stdin)['apiKey'])"); \
+	 echo ">> token: $$tok"; \
+	 $(KUBECTL) create secret generic gprofiler-agent-token \
+	   --from-literal=token=$$tok --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(KUBECTL) rollout restart daemonset/gprofiler-agent
+	$(KUBECTL) rollout status daemonset/gprofiler-agent --timeout=180s
+
+## k8s-up          : config + deploy + token (assumes cluster up & images loaded)
+k8s-up: k8s-config k8s-deploy k8s-token
+	@echo ">> up. Give the agent ~30-60s to enumerate CRI, then: make -f Makefile.k8s k8s-status"
+
+## k8s-status      : show the live workload inventory (all scopes)
+k8s-status:
+	@echo "== pods ==" && $(KUBECTL) get pods -o wide
+	@echo "== agent DaemonSet ==" && $(KUBECTL) get ds gprofiler-agent
+	@echo "== workload_status (host scope) ==" ; \
+	 $(KUBECTL) run wsq-$$RANDOM --image=curlimages/curl:8.7.1 --restart=Never -i --rm --quiet --command -- \
+	   curl -s "http://webapp/api/metrics/profiling/workload_status?scope=host" | python3 -m json.tool || true
+
+## k8s-test        : run the real-topology acceptance suite (AT-K1..K5) as a Job
+k8s-test:
+	$(KUBECTL) delete job k8s-acceptance --ignore-not-found
+	$(KUBECTL) apply -f tests/job-api.yaml
+	@echo ">> waiting for the acceptance Job..."
+	@$(KUBECTL) wait --for=condition=complete job/k8s-acceptance --timeout=420s & \
+	 comp=$$!; \
+	 $(KUBECTL) wait --for=condition=failed job/k8s-acceptance --timeout=420s & \
+	 fail=$$!; \
+	 wait -n $$comp $$fail; \
+	 $(KUBECTL) logs job/k8s-acceptance
+
+## k8s-start       : host-scope START for the real agent (SERVICE overridable)
+SERVICE ?= k8s-sandbox
+# Host discovery + JSON parsing run on the HOST (python3), not in the curl pod
+# (the curl image has no python3); only the raw HTTP calls run in-cluster.
+define resolve_host
+$$(kubectl -n $(NS) run hs-$$RANDOM --image=curlimages/curl:8.7.1 --restart=Never -i --rm --quiet --command -- \
+  curl -s "http://webapp/api/metrics/profiling/host_status?service_name=$(SERVICE)" \
+  | python3 -c "import sys,json;print(json.load(sys.stdin)['hosts'][0]['hostname'])")
+endef
+
+k8s-start:
+	@host=$(call resolve_host); echo ">> start on host=$$host"; \
+	 req=$$(python3 -c "import json;print(json.dumps({'service_name':'$(SERVICE)','request_type':'start','continuous':False,'duration':30,'frequency':11,'profiling_mode':'cpu','target_scope':'host','target_hosts':{'$$host':[]},'target_entities':[{'service_name':'$(SERVICE)','hostname':'$$host'}],'additional_args':{}}))"); \
+	 $(KUBECTL) run rq-$$RANDOM --image=curlimages/curl:8.7.1 --restart=Never -i --rm --quiet --command -- \
+	   curl -s -X POST "http://webapp/api/metrics/profile_request" -H "Content-Type: application/json" -d "$$req"
+
+## k8s-stop        : host-scope STOP for the real agent
+k8s-stop:
+	@host=$(call resolve_host); echo ">> stop on host=$$host"; \
+	 req=$$(python3 -c "import json;print(json.dumps({'service_name':'$(SERVICE)','request_type':'stop','continuous':False,'duration':30,'frequency':11,'profiling_mode':'cpu','target_scope':'host','stop_level':'host','target_hosts':{'$$host':[]},'target_entities':[{'service_name':'$(SERVICE)','hostname':'$$host'}],'additional_args':{}}))"); \
+	 $(KUBECTL) run rq-$$RANDOM --image=curlimages/curl:8.7.1 --restart=Never -i --rm --quiet --command -- \
+	   curl -s -X POST "http://webapp/api/metrics/profile_request" -H "Content-Type: application/json" -d "$$req"
+
+## k8s-flamegraph  : list flamegraph artifacts produced in (Local)S3
+# NOTE: the amazon/aws-cli image ENTRYPOINT is already `aws`, so pass args
+# directly after `--` (no `--command`, which would override the entrypoint).
+k8s-flamegraph:
+	@$(KUBECTL) run s3ls-$$RANDOM --image=amazon/aws-cli:2.15.0 --restart=Never -i --rm --quiet \
+	  --env=AWS_ACCESS_KEY_ID=test --env=AWS_SECRET_ACCESS_KEY=test --env=AWS_DEFAULT_REGION=us-east-1 \
+	  -- --endpoint-url http://localstack:4566 s3 ls s3://performance-studio-bucket/ --recursive || true
+
+## k8s-logs        : follow the agent DaemonSet logs
+k8s-logs:
+	$(KUBECTL) logs -f ds/gprofiler-agent
+
+## k8s-ui          : print how to reach the console (via nginx NodePort)
+k8s-ui: k8s-url
+
+## k8s-url         : print the console URL (basic auth admin/admin)
+k8s-url:
+	@echo "Console (basic auth from deploy/.htpasswd):"
+ifeq ($(CLUSTER),kind)
+	@echo "  https://localhost:30443   (kind extraPortMapping)"
+else
+	@echo "  https://$$(minikube ip -p $(CLUSTER_NAME)):30443"
+endif
+
+## k8s-down        : remove workloads + agent (studio stack stays up)
+k8s-down:
+	$(KUBECTL) delete -f manifests/40-workloads.yaml --ignore-not-found
+	$(KUBECTL) delete -f manifests/50-agent-daemonset.yaml --ignore-not-found
+
+## k8s-down-all    : delete the entire cluster (destructive)
+k8s-down-all:
+ifeq ($(CLUSTER),kind)
+	kind delete cluster --name $(CLUSTER_NAME)
+else
+	minikube delete -p $(CLUSTER_NAME)
+endif
+
+# --------------------------------------------------------------------------- #
+# Spark-on-Kubernetes demo (spark/): a driver + 6 executor JVM pods deliberately
+# oversubscribed to be very busy, profiled PER JVM THREAD by the agent (which runs
+# with --java-async-profiler-args=threads). This is the workload that shows real
+# Spark executor task threads in a gProfiler flamegraph.
+# --------------------------------------------------------------------------- #
+SPARK_DIR             := spark
+SPARK_NS              := spark
+SPARK_IMAGE           := spark-cpu-job:sandbox
+SPARK_PROFILE_SECONDS ?= 90
+# Distinct workloads to run side by side (each becomes its own appid in gProfiler).
+SPARK_MODES           ?= agg join regex pyudf
+SPARK_MULTI_SECONDS   ?= 300
+# Partitions per app => task count => number of per-thread columns. Lower it
+# (e.g. SPARK_PARTITIONS=6) for a less crowded per-thread flamegraph.
+SPARK_PARTITIONS      ?= 24
+
+.PHONY: spark-build spark-load spark-submit spark-status spark-profile spark-demo \
+        spark-multi spark-multi-demo spark-clean
+
+## spark-build     : build the Spark demo image (job baked into apache/spark)
+spark-build:
+	docker build -t $(SPARK_IMAGE) $(SPARK_DIR)
+
+## spark-load      : load the Spark image into the cluster (CLUSTER=kind|minikube)
+spark-load:
+	@if [ "$(CLUSTER)" = "kind" ]; then \
+	  kind load docker-image $(SPARK_IMAGE) --name $(CLUSTER_NAME); \
+	else \
+	  minikube image load $(SPARK_IMAGE) -p $(CLUSTER_NAME); \
+	fi
+
+## spark-submit    : RBAC + submit (spark-submit cluster mode -> driver + executors)
+spark-submit:
+	kubectl apply -f $(SPARK_DIR)/00-rbac.yaml
+	-kubectl -n $(SPARK_NS) delete job spark-submit --ignore-not-found --now
+	-kubectl -n $(SPARK_NS) delete pod spark-cpu-driver --ignore-not-found --now
+	kubectl apply -f $(SPARK_DIR)/10-submit-job.yaml
+	@echo ">> submitted. Driver + 6 executor pods appear in ns/$(SPARK_NS) within ~30-40s."
+
+## spark-status    : show the Spark driver + executor pods
+spark-status:
+	kubectl -n $(SPARK_NS) get pods -o wide
+
+## spark-profile   : host-scope profile while Spark runs (SPARK_PROFILE_SECONDS=90)
+spark-profile:
+	@host=$(call resolve_host); echo ">> profiling host=$$host for $(SPARK_PROFILE_SECONDS)s"; \
+	 req=$$(python3 -c "import json;print(json.dumps({'service_name':'$(SERVICE)','request_type':'start','continuous':False,'duration':$(SPARK_PROFILE_SECONDS),'frequency':11,'profiling_mode':'cpu','target_scope':'host','target_hosts':{'$$host':[]},'target_entities':[{'service_name':'$(SERVICE)','hostname':'$$host'}],'additional_args':{}}))"); \
+	 $(KUBECTL) run rq-$$RANDOM --image=curlimages/curl:8.7.1 --restart=Never -i --rm --quiet --command -- \
+	   curl -s -X POST "http://webapp/api/metrics/profile_request" -H "Content-Type: application/json" -d "$$req"
+
+## spark-demo      : build + load + submit + profile + list flamegraph (one-shot)
+spark-demo: spark-build spark-load spark-submit
+	@echo ">> letting executors schedule and get busy (~45s)..."; sleep 45
+	@$(MAKE) -f Makefile.k8s spark-status
+	@$(MAKE) -f Makefile.k8s spark-profile
+	@echo ">> waiting for the profile to run + upload..."; sleep $$(( $(SPARK_PROFILE_SECONDS) + 45 ))
+	@$(MAKE) -f Makefile.k8s k8s-flamegraph
+	@echo ">> done: the newest *_adhoc_flamegraph.html above is the Spark per-thread profile."
+
+## spark-multi     : submit SEVERAL distinct apps at once (SPARK_MODES="agg join regex pyudf")
+# Each mode hits a different hot path and carries its own app name, so gProfiler
+# shows them under separate appids -> you can compare RELATIVE weight across apps
+# instead of staring at four identical per-thread flamegraphs.
+spark-multi: spark-build spark-load
+	kubectl apply -f $(SPARK_DIR)/00-rbac.yaml
+	@for m in $(SPARK_MODES); do \
+	  name="spark-$$m"; \
+	  echo ">> submitting workload=$$m app=$$name"; \
+	  kubectl -n $(SPARK_NS) delete job spark-submit-$$m --ignore-not-found --now >/dev/null 2>&1; \
+	  kubectl -n $(SPARK_NS) delete pod spark-$$m-driver --ignore-not-found --now >/dev/null 2>&1; \
+	  sed -e "s/__SUFFIX__/$$m/g" -e "s/__MODE__/$$m/g" \
+	      -e "s/__APPNAME__/$$name/g" -e "s/__SECONDS__/$(SPARK_MULTI_SECONDS)/g" \
+	      -e "s/__PARTS__/$(SPARK_PARTITIONS)/g" \
+	      $(SPARK_DIR)/11-submit-workload.yaml | kubectl apply -f - ; \
+	done
+	@echo ">> submitted modes: $(SPARK_MODES). Drivers + executors appear in ns/$(SPARK_NS) within ~40s."
+
+## spark-multi-demo: build+load+submit N apps + profile + list flamegraph (one-shot)
+spark-multi-demo: spark-multi
+	@echo ">> letting all apps schedule and get busy (~60s)..."; sleep 60
+	@$(MAKE) -f Makefile.k8s spark-status
+	@$(MAKE) -f Makefile.k8s spark-profile
+	@echo ">> waiting for the profile to run + upload..."; sleep $$(( $(SPARK_PROFILE_SECONDS) + 45 ))
+	@$(MAKE) -f Makefile.k8s k8s-flamegraph
+	@echo ">> done. In the gProfiler UI, filter by appid (java: spark-agg / spark-join /"
+	@echo "   spark-regex / spark-python-udf) to compare each app's relative weight."
+
+## spark-clean     : remove all Spark jobs/drivers + RBAC (deletes the spark namespace)
+spark-clean:
+	-kubectl -n $(SPARK_NS) delete job -l app=spark-submit --ignore-not-found
+	-kubectl -n $(SPARK_NS) delete job spark-submit --ignore-not-found
+	-kubectl -n $(SPARK_NS) delete pod spark-cpu-driver --ignore-not-found
+	-kubectl delete -f $(SPARK_DIR)/00-rbac.yaml --ignore-not-found

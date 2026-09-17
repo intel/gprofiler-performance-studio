@@ -1,0 +1,87 @@
+# Agent log ingest + periodic log-rotation. Co-located in one pod so they can
+# share the /logs volume (compose used a shared named volume; an emptyDir shared
+# by two containers is the pod-native equivalent and avoids needing RWX storage).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logs-backend
+  namespace: perf-studio
+  labels: { app: logs-backend }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: logs-backend }
+  template:
+    metadata:
+      labels: { app: logs-backend }
+    spec:
+      securityContext:
+        runAsUser: 888
+        runAsGroup: 888
+        fsGroup: 888
+        # agents-logs-backend binds port 80 as non-root; allow the low-port bind
+        # the same way Docker does by default (see webapp for rationale).
+        sysctls:
+          - name: net.ipv4.ip_unprivileged_port_start
+            value: "0"
+      containers:
+        - name: agents-logs-backend
+          image: gprofiler-ps/agents-logs-backend:sandbox
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ENV
+              value: open
+            - name: APP_LOG_FILE_PATH
+              value: /logs/agents-logs-app.log
+            - name: LOG_FILE_PATH
+              value: /logs/agents-logs.log
+            - name: GPROFILER_POSTGRES_HOST
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_HOST } }
+            - name: GPROFILER_POSTGRES_PORT
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_PORT } }
+            - name: GPROFILER_POSTGRES_DB_NAME
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_DB } }
+            - name: GPROFILER_POSTGRES_USERNAME
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_USER } }
+            - name: GPROFILER_POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: POSTGRES_PASSWORD } }
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: logs
+              mountPath: /logs
+        - name: periodic-tasks
+          image: gprofiler-ps/periodic-tasks:sandbox
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PGHOST
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_HOST } }
+            - name: PGPORT
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_PORT } }
+            - name: PGDATABASE
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_DB } }
+            - name: PGUSER
+              valueFrom: { configMapKeyRef: { name: studio-config, key: POSTGRES_USER } }
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: POSTGRES_PASSWORD } }
+            - name: LOGROTATE_PATTERN
+              value: /logs/*.log
+            - name: LOGROTATE_SIZE
+              value: 15M
+          volumeMounts:
+            - name: logs
+              mountPath: /logs
+      volumes:
+        - name: logs
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agents-logs-backend
+  namespace: perf-studio
+spec:
+  selector: { app: logs-backend }
+  ports:
+    - port: 80
+      targetPort: 80

@@ -25,3 +25,4 @@ fastapi==0.109.0
 uvicorn==0.27.0
 gunicorn==23.0.0
 slack_sdk==3.36.0
+bitmath==2.1.1

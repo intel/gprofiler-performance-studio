@@ -1,0 +1,116 @@
+#
+# E2E overlay for the Performance Studio + gProfiler agent test harness.
+#
+# Layer this on top of the base stack:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.e2e.yml \
+#     --profile with-clickhouse up -d --build
+#
+# It adds:
+#   * e2e-sample-app  - a deterministic CPU-burning workload to profile
+#   * gprofiler-agent - a real gProfiler agent in dynamic/heartbeat mode, pointed
+#                       at the INTERNAL webapp (bypassing nginx basic auth), that
+#                       reports workload inventory and executes start/stop commands
+#   * e2e-tests       - an in-network pytest runner (profile "test"; on demand)
+#
+# The agent profiles only the sample app's PID namespace, so it never touches the
+# host's processes.
+#
+services:
+  # A deterministic target the agent can profile (py-spy sees a hot Python frame).
+  e2e-sample-app:
+    image: python:3.11-slim
+    container_name: gprofiler-ps-e2e-sample-app
+    restart: unless-stopped
+    command:
+      - python3
+      - -c
+      - |
+        import time
+        def hot_loop():
+            total = 0
+            for i in range(5_000_000):
+                total += (i * i) % 7
+            return total
+        while True:
+            hot_loop()
+            time.sleep(0.01)
+
+  # gProfiler agent in dynamic profiling (heartbeat) mode.
+  # Defaults to the upstream public image; override with GPROFILER_IMAGE, or build
+  # from source with `make -f Makefile.e2e e2e-up-src` (see E2E_HARNESS.md).
+  gprofiler-agent:
+    image: ${GPROFILER_IMAGE:-intel/gprofiler:latest}
+    container_name: gprofiler-ps-e2e-agent
+    restart: unless-stopped
+    entrypoint: ["/gprofiler"]
+    # Point at the internal webapp service (no nginx basic auth on the internal
+    # port); the backend does not validate the bearer token locally.
+    command:
+      # --server-host: profile upload + health check; --api-server: heartbeat/metrics.
+      # Both are served by the internal webapp (no nginx basic auth on that port).
+      - --server-host=http://webapp
+      - --api-server=http://webapp
+      # A valid profiler token is required for upload/health-check. Mint one from
+      # the running studio (GET /api/api_key) and export GPROFILER_TOKEN before up.
+      - "--token=${GPROFILER_TOKEN:?set GPROFILER_TOKEN first - use make e2e-up}"
+      - --service-name=e2e-sample-app
+      - --upload-results
+      - --enable-heartbeat-server
+      - --heartbeat-interval=10
+      - --perf-mode=none
+      - --output-dir=/tmp/gprofiler_output
+      - --dont-send-logs
+      # Agent shares the sample app's PID namespace (not host-init), so skip the
+      # init-namespace guard.
+      - --disable-pidns-check
+    privileged: true
+    # Share the sample app's PID namespace so the agent profiles only that
+    # workload (isolated from the host).
+    pid: "service:e2e-sample-app"
+    environment:
+      - GPROFILER_IN_CONTAINER=1
+      - POD_NAMESPACE=e2e
+      - POD_NAME=gprofiler-agent
+    depends_on:
+      - webapp
+      - e2e-sample-app
+
+  # In-network acceptance/UI test runner. Kept behind the "test" profile so it
+  # only runs on demand (e.g. `docker compose ... --profile test run --rm e2e-tests`).
+  e2e-tests:
+    build:
+      context: ../src
+      dockerfile: tests/e2e/Dockerfile
+    container_name: gprofiler-ps-e2e-tests
+    profiles: ["test"]
+    environment:
+      # Reach services by their compose network names.
+      - E2E_BASE_URL=http://webapp
+      - E2E_NGINX_URL=https://nginx-load-balancer
+      - E2E_BASIC_AUTH_USER=admin
+      - E2E_BASIC_AUTH_PASSWORD=admin
+      - GPROFILER_POSTGRES_HOST=$POSTGRES_HOST
+      - GPROFILER_POSTGRES_PORT=$POSTGRES_PORT
+      - GPROFILER_POSTGRES_USERNAME=$POSTGRES_USER
+      - GPROFILER_POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+      - GPROFILER_POSTGRES_DB_NAME=$POSTGRES_DB
+    depends_on:
+      - webapp
+      - db_postgres
+
+  # Playwright UI acceptance runner (profile "ui"; on demand). Reaches the
+  # console via the internal nginx service with basic auth over self-signed TLS.
+  e2e-ui-tests:
+    build:
+      context: ../src/tests/playwright
+      dockerfile: Dockerfile
+    container_name: gprofiler-ps-e2e-ui-tests
+    profiles: ["ui"]
+    environment:
+      - E2E_UI_URL=https://nginx-load-balancer
+      - E2E_BASIC_AUTH_USER=admin
+      - E2E_BASIC_AUTH_PASSWORD=admin
+      - E2E_UI_SERVICE=e2e-sample-app
+    depends_on:
+      - nginx-load-balancer

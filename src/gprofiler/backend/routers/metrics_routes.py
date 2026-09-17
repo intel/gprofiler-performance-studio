@@ -17,13 +17,16 @@
 import json
 import math
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from logging import getLogger
 from typing import List, Optional
 
 from backend.models.filters_models import FilterTypes
 from backend.models.flamegraph_models import FGParamsBaseModel
 from backend.models.metrics_models import (
+    BulkProfilingRequest,
+    BulkProfilingRequestResult,
+    BulkProfilingResponse,
     CommandCompletionRequest,
     CpuMetric,
     CpuTrend,
@@ -35,20 +38,27 @@ from backend.models.metrics_models import (
     MetricNodesAndCores,
     MetricNodesCoresSummary,
     MetricSummary,
+    ProfilingInventoryStatusRequest,
+    ProfilingInventoryStatusResponse,
     ProfilingHostStatus,
     ProfilingHostStatusRequest,
+    ProfilingHostStatusResponse,
     ProfilingRequest,
     ProfilingResponse,
     SampleCount,
 )
-from backend.utils.filters_utils import get_rql_all_eq_values, get_rql_first_eq_key, get_rql_only_for_one_key
+from backend.utils.dynamic_profiling_utils import validate_profiling_capacity, validate_pmu_events, validate_async_profiler_config
+from backend.utils.filters_utils import get_rql_first_eq_key, get_rql_only_for_one_key, get_rql_all_eq_values
 from backend.utils.notifications import SlackNotifier
 from backend.utils.request_utils import flamegraph_base_request_params, get_metrics_response, get_query_response
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from gprofiler_dev import S3ProfileDal
+from gprofiler_dev import config as _dev_config
 from gprofiler_dev.postgres.db_manager import DBManager
+
+# Adhoc profiling models
 from pydantic import BaseModel
 
 logger = getLogger(__name__)
@@ -101,14 +111,10 @@ def get_time_interval_value(start_time: datetime, end_time: datetime, interval: 
 
 def profiling_host_status_params(
     service_name: Optional[List[str]] = Query(None, description="Filter by service name(s)"),
-    exact_match: bool = Query(
-        False, description="Use exact match for service name (default: false for partial matching)"
-    ),
+    exact_match: bool = Query(False, description="Use exact match for service name (default: false for partial matching)"),
     hostname: Optional[List[str]] = Query(None, description="Filter by hostname(s)"),
     ip_address: Optional[List[str]] = Query(None, description="Filter by IP address(es)"),
-    profiling_status: Optional[List[str]] = Query(
-        None, description="Filter by profiling status(es) (e.g., pending, completed, stopped)"
-    ),
+    profiling_status: Optional[List[str]] = Query(None, description="Filter by profiling status(es) (e.g., pending, completed, stopped)"),
     command_type: Optional[List[str]] = Query(None, description="Filter by command type(s) (e.g., start, stop)"),
     pids: Optional[List[int]] = Query(None, description="Filter by PIDs"),
 ) -> ProfilingHostStatusRequest:
@@ -120,6 +126,46 @@ def profiling_host_status_params(
         profiling_status=profiling_status,
         command_type=command_type,
         pids=pids,
+    )
+
+
+def profiling_inventory_status_params(
+    scope: str = Query("host", description="Inventory scope: service, namespace, host, pod, container, process"),
+    service_name: Optional[List[str]] = Query(None, description="Filter by service name(s)"),
+    exact_match: bool = Query(False, description="Use exact match for service name (default: false for partial matching)"),
+    hostname: Optional[List[str]] = Query(None, description="Filter by hostname(s)"),
+    ip_address: Optional[List[str]] = Query(None, description="Filter by IP address(es)"),
+    namespace: Optional[List[str]] = Query(None, description="Filter by namespace(s)"),
+    pod_name: Optional[List[str]] = Query(None, description="Filter by pod name(s)"),
+    container_name: Optional[List[str]] = Query(None, description="Filter by container name(s)"),
+    workload_name: Optional[List[str]] = Query(None, description="Filter by workload name(s)"),
+    process_name: Optional[List[str]] = Query(None, description="Filter by process name(s)"),
+    profiling_status: Optional[List[str]] = Query(None, description="Filter by profiling status(es)"),
+    command_type: Optional[List[str]] = Query(None, description="Filter by command type(s)"),
+    pids: Optional[List[int]] = Query(None, description="Filter by PIDs"),
+    page: int = Query(0, ge=0, description="Zero-based page index"),
+    page_size: int = Query(50, ge=1, le=200, description="Rows per page (max 200)"),
+    sort_by: Optional[str] = Query(None, description="Column to sort by (defaults to scope key order)"),
+    sort_order: str = Query("asc", description="Sort direction: asc or desc"),
+) -> ProfilingInventoryStatusRequest:
+    return ProfilingInventoryStatusRequest(
+        scope=scope,
+        service_name=service_name,
+        exact_match=exact_match,
+        hostname=hostname,
+        ip_address=ip_address,
+        namespace=namespace,
+        pod_name=pod_name,
+        container_name=container_name,
+        workload_name=workload_name,
+        process_name=process_name,
+        profiling_status=profiling_status,
+        command_type=command_type,
+        pids=pids,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 
@@ -319,19 +365,46 @@ def create_profiling_request(profiling_request: ProfilingRequest) -> ProfilingRe
                 "mode": profiling_request.profiling_mode,
                 "target_hosts": profiling_request.target_hosts,
                 "stop_level": profiling_request.stop_level,
+                "dry_run": profiling_request.dry_run,
             },
         )
-
         db_manager = DBManager()
+
+        target_entities = [entity.dict() for entity in (profiling_request.target_entities or [])]
+        target_scope = profiling_request.target_scope or "host"
+        resolved_target_hosts = profiling_request.target_hosts or {}
+        if target_entities or target_scope != "host":
+            resolved_target_hosts = db_manager.resolve_workload_targets(
+                service_name=profiling_request.service_name,
+                target_scope=target_scope,
+                target_entities=target_entities,
+            )
+            if not resolved_target_hosts:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"No active targets were resolved for scope '{target_scope}' in service '{profiling_request.service_name}'",
+                )
+
+        # Handle dry run requests.
+        # No DB changes, just validate and return success.
+        if profiling_request.dry_run:
+            return ProfilingResponse(
+                success=True,
+                message="Dry run: Profiling request validated successfully.",
+                request_id=None,
+                command_ids=[],
+                estimated_completion_time=None,
+            )
+
         request_id = str(uuid.uuid4())
         command_ids = []  # Track all command IDs created
 
         try:
             # Convert target_hosts to legacy format for database compatibility
-            target_hostnames = list(profiling_request.target_hosts.keys()) if profiling_request.target_hosts else None
+            target_hostnames = list(resolved_target_hosts.keys()) if resolved_target_hosts else None
             host_pid_mapping = (
-                {hostname: pids for hostname, pids in profiling_request.target_hosts.items() if pids}
-                if profiling_request.target_hosts
+                {hostname: pids for hostname, pids in resolved_target_hosts.items() if pids}
+                if resolved_target_hosts
                 else None
             )
 
@@ -347,6 +420,8 @@ def create_profiling_request(profiling_request: ProfilingRequest) -> ProfilingRe
                 target_hostnames=target_hostnames,
                 pids=None,  # Deprecated field, always None
                 host_pid_mapping=host_pid_mapping,
+                target_scope=target_scope,
+                target_entities=target_entities,
                 additional_args=profiling_request.additional_args,
             )
 
@@ -359,8 +434,8 @@ def create_profiling_request(profiling_request: ProfilingRequest) -> ProfilingRe
                 target_hosts = []
 
                 # Determine target hosts from target_hosts mapping
-                if profiling_request.target_hosts:
-                    target_hosts = list(profiling_request.target_hosts.keys())
+                if resolved_target_hosts:
+                    target_hosts = list(resolved_target_hosts.keys())
 
                 if target_hosts:
                     # Create commands for specific hosts
@@ -391,8 +466,8 @@ def create_profiling_request(profiling_request: ProfilingRequest) -> ProfilingRe
                 target_hosts = []
 
                 # Determine target hosts for stop commands
-                if profiling_request.target_hosts:
-                    target_hosts = list(profiling_request.target_hosts.keys())
+                if resolved_target_hosts:
+                    target_hosts = list(resolved_target_hosts.keys())
 
                 if target_hosts:
                     for hostname in target_hosts:
@@ -410,8 +485,8 @@ def create_profiling_request(profiling_request: ProfilingRequest) -> ProfilingRe
                         else:  # process level stop
                             # Get PIDs for this specific host from target_hosts mapping
                             host_pids = None
-                            if profiling_request.target_hosts and hostname in profiling_request.target_hosts:
-                                host_pids = profiling_request.target_hosts[hostname]
+                            if resolved_target_hosts and hostname in resolved_target_hosts:
+                                host_pids = resolved_target_hosts[hostname]
 
                             # Stop specific processes for this host
                             db_manager.handle_process_level_stop(
@@ -472,6 +547,161 @@ def create_profiling_request(profiling_request: ProfilingRequest) -> ProfilingRe
         raise HTTPException(status_code=500, detail="Internal server error while processing profiling request")
 
 
+@router.post("/profile_request/bulk", response_model=BulkProfilingResponse)
+def create_bulk_profiling_requests(bulk_request: BulkProfilingRequest) -> BulkProfilingResponse:
+    """
+    Create multiple profiling requests in a single API call.
+
+    This endpoint accepts a list of profiling requests and processes them in bulk.
+    It provides better efficiency for operations that need to start/stop profiling
+    across multiple services simultaneously.
+
+    Benefits over multiple single requests:
+    - Single API call reduces network overhead
+    - Atomic capacity validation across all requests
+    - Better rate limiting control
+    - Partial success/failure reporting per request
+
+    Each request in the bulk operation is validated independently, and the response
+    includes detailed results for each request, including successes and failures.
+
+    Returns:
+        BulkProfilingResponse with individual results for each request
+    """
+    try:
+        logger.info(
+            f"Received bulk profiling request with {len(bulk_request.requests)} requests",
+            extra={"total_requests": len(bulk_request.requests)},
+        )
+
+        # Initialize database manager
+        db_manager = DBManager()
+
+        # Validate profiling capacity across all requests in the bulk operation
+        is_valid, error_message, target_hostnames = validate_profiling_capacity(
+            bulk_profiling_request=bulk_request,
+            db_manager=db_manager,
+            service_name=None  # Validate globally across all services
+        )
+
+        # Validate PMU events support across all requests
+        is_valid, error_message = validate_pmu_events(
+            bulk_profiling_request=bulk_request,
+            db_manager=db_manager
+        )
+
+        if not is_valid:
+            logger.warning(
+                f"Bulk profiling capacity validation failed: {error_message}"
+            )
+            # Return structured error response
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "detail": [
+                        {
+                            "loc": ["body", "requests"],
+                            "msg": error_message,
+                            "type": "value_error"
+                        }
+                    ]
+                }
+            )
+
+        # Validate async profiler config across all requests
+        is_valid, error_message = validate_async_profiler_config(
+            bulk_profiling_request=bulk_request
+        )
+
+        if not is_valid:
+            logger.warning(
+                f"Async profiler config validation failed: {error_message}"
+            )
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "detail": [
+                        {
+                            "loc": ["body", "requests"],
+                            "msg": error_message,
+                            "type": "value_error"
+                        }
+                    ]
+                }
+            )
+
+        logger.info(
+            f"Bulk profiling capacity validated successfully. Total target hosts: {len(target_hostnames)}"
+        )
+
+        results: List[BulkProfilingRequestResult] = []
+        successful_count = 0
+        failed_count = 0
+
+        # Process each request individually by calling create_profiling_request
+        for index, profiling_request in enumerate(bulk_request.requests):
+            try:
+                # Call the existing single request endpoint logic
+                response = create_profiling_request(profiling_request)
+                
+                # Record successful result
+                result = BulkProfilingRequestResult(
+                    index=index,
+                    service_name=profiling_request.service_name,
+                    success=True,
+                    response=response,
+                    error=None
+                )
+                results.append(result)
+                successful_count += 1
+
+            except HTTPException as http_exc:
+                # Handle HTTP exceptions from create_profiling_request
+                logger.warning(
+                    f"Failed to process bulk request at index {index} for service {profiling_request.service_name}: {http_exc.detail}"
+                )
+                result = BulkProfilingRequestResult(
+                    index=index,
+                    service_name=profiling_request.service_name,
+                    success=False,
+                    response=None,
+                    error=str(http_exc.detail)
+                )
+                results.append(result)
+                failed_count += 1
+
+            except Exception as e:
+                # Handle unexpected exceptions
+                logger.error(
+                    f"Unexpected error processing bulk request at index {index} for service {profiling_request.service_name}: {str(e)}",
+                    exc_info=True
+                )
+                result = BulkProfilingRequestResult(
+                    index=index,
+                    service_name=profiling_request.service_name,
+                    success=False,
+                    response=None,
+                    error=f"Unexpected error: {str(e)}"
+                )
+                results.append(result)
+                failed_count += 1
+
+        logger.info(
+            f"Bulk profiling request completed: {successful_count} successful, {failed_count} failed out of {len(bulk_request.requests)} total"
+        )
+
+        return BulkProfilingResponse(
+            total_submitted=len(bulk_request.requests),
+            successful_count=successful_count,
+            failed_count=failed_count,
+            results=results
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to process bulk profiling request: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error while processing bulk profiling request")
+
+
 def _create_slack_blocks(profiling_request: ProfilingRequest, request_id: str) -> list:
     """
     Create Slack message blocks for profiling request notifications.
@@ -495,8 +725,8 @@ def _create_slack_blocks(profiling_request: ProfilingRequest, request_id: str) -
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"A new request was made to {profiling_request.request_type} a profile and the details are shown below:",
-            },
+                "text": f"A new request was made to {profiling_request.request_type} a profile and the details are shown below:"
+            }
         },
         {
             "type": "section",
@@ -561,12 +791,36 @@ def receive_heartbeat(heartbeat: HeartbeatRequest):
                 hostname=heartbeat.hostname,
                 ip_address=heartbeat.ip_address,
                 service_name=heartbeat.service_name,
+                agent_version=heartbeat.agent_version,
+                run_mode=heartbeat.run_mode,
+                namespace=heartbeat.namespace,
+                pod_name=heartbeat.pod_name,
+                containers=[container.dict() for container in (heartbeat.containers or [])],
                 last_command_id=heartbeat.last_command_id,
                 received_command_ids=heartbeat.received_command_ids,
                 executed_command_ids=heartbeat.executed_command_ids,
                 status=heartbeat.status,
                 heartbeat_timestamp=heartbeat.timestamp,
+                supported_perf_events=heartbeat.perf_supported_events,  # Use agent field name
             )
+
+            # 1b. Auto-subscribe newly-registered hosts to an active service-wide
+            # profiling session. Hosts that join a service after a service-scoped
+            # request was issued (e.g. cluster autoscaling) are enrolled here so
+            # users do not have to re-select the service.
+            try:
+                if db_manager.auto_subscribe_host_to_service(
+                    hostname=heartbeat.hostname,
+                    service_name=heartbeat.service_name,
+                ):
+                    logger.info(
+                        f"Auto-subscribed host {heartbeat.hostname} to active service-wide "
+                        f"profiling for service {heartbeat.service_name}"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"Auto-subscribe check failed for {heartbeat.hostname}/{heartbeat.service_name}: {e}"
+                )
 
             # 2. Check for current profiling command for this host/service
             current_command = db_manager.get_current_profiling_command(
@@ -744,7 +998,7 @@ def report_command_completion(completion: CommandCompletionRequest):
         raise HTTPException(status_code=500, detail="Internal server error while processing command completion")
 
 
-@router.get("/profiling/host_status", response_model=List[ProfilingHostStatus])
+@router.get("/profiling/host_status", response_model=ProfilingHostStatusResponse)
 def get_profiling_host_status(
     profiling_params: ProfilingHostStatusRequest = Depends(profiling_host_status_params),
 ):
@@ -762,7 +1016,7 @@ def get_profiling_host_status(
         profiling_params: ProfilingHostStatusRequest object containing all filter parameters
 
     Returns:
-        List of host statuses filtered by the specified criteria
+        ProfilingHostStatusResponse with hosts list, active count, and total count
     """
     db_manager = DBManager()
 
@@ -774,7 +1028,14 @@ def get_profiling_host_status(
         profiling_statuses=profiling_params.profiling_status,
         command_types=profiling_params.command_type,
         pids=profiling_params.pids,
-        exact_match=profiling_params.exact_match,
+        exact_match=profiling_params.exact_match
+    )
+
+    # Get total host count (all hosts for the selected service)
+    # This shows the total fleet size for the service
+    total_count = db_manager.get_total_host_count(
+        service_names=profiling_params.service_name,
+        exact_match=profiling_params.exact_match
     )
 
     # Convert database results to response model
@@ -813,7 +1074,37 @@ def get_profiling_host_status(
             )
         )
 
-    return results
+    return ProfilingHostStatusResponse(
+        hosts=results,
+        active_count=len(results),
+        total_count=total_count
+    )
+
+
+@router.get("/profiling/workload_status", response_model=ProfilingInventoryStatusResponse)
+def get_profiling_workload_status(
+    profiling_params: ProfilingInventoryStatusRequest = Depends(profiling_inventory_status_params),
+):
+    db_manager = DBManager()
+    return db_manager.get_workload_inventory_status(
+        scope=profiling_params.scope,
+        service_names=profiling_params.service_name,
+        hostnames=profiling_params.hostname,
+        ip_addresses=profiling_params.ip_address,
+        namespaces=profiling_params.namespace,
+        pod_names=profiling_params.pod_name,
+        container_names=profiling_params.container_name,
+        workload_names=profiling_params.workload_name,
+        process_names=profiling_params.process_name,
+        profiling_statuses=profiling_params.profiling_status,
+        command_types=profiling_params.command_type,
+        pids=profiling_params.pids,
+        exact_match=profiling_params.exact_match,
+        page=profiling_params.page,
+        page_size=profiling_params.page_size,
+        sort_by=profiling_params.sort_by,
+        sort_order=profiling_params.sort_order,
+    )
 
 
 @router.get("/adhoc_flamegraphs", response_model=List[FlamegraphFile])
@@ -828,13 +1119,13 @@ def get_adhoc_flamegraphs(
     try:
         db_manager = DBManager()
         service_name = fg_params.service_name
-
+        
         # Get service_id for metadata query
         service_id = db_manager.get_service(service_name)
-
+        
         # Extract hostname filters from fg_params if present
         hostname_filters = get_rql_all_eq_values(fg_params.filter, FilterTypes.HOSTNAME_KEY)
-
+        
         # Get metadata from database (already filtered by service, time, and hostname)
         metadata_list = db_manager.get_adhoc_flamegraphs_metadata(
             service_id=service_id,
@@ -842,23 +1133,21 @@ def get_adhoc_flamegraphs(
             end_time=fg_params.end_time,
             hostname_filters=hostname_filters,
         )
-
+        
         # Convert metadata to FlamegraphFile objects
         flamegraph_files = []
         for metadata in metadata_list:
             s3_key = metadata["s3_key"]
-            filename = s3_key.split("/")[-1]
+            filename = s3_key.split('/')[-1]
 
-            flamegraph_files.append(
-                FlamegraphFile(
-                    filename=filename,
-                    timestamp=datetime.fromisoformat(metadata["start_time"]),
-                    hostname=metadata["hostname"],
-                    size=metadata.get("file_size"),
-                    s3_path=s3_key,
-                    perf_events=metadata.get("perf_events"),
-                )
-            )
+            flamegraph_files.append(FlamegraphFile(
+                filename=filename,
+                timestamp=datetime.fromisoformat(metadata["start_time"]).replace(tzinfo=timezone.utc),
+                hostname=metadata["hostname"],
+                size=metadata.get("file_size"),
+                s3_path=s3_key,
+                perf_events=metadata.get("perf_events")
+            ))
 
         # Mark entries whose S3 file no longer exists.
         # All head_object calls are issued in parallel (one thread per key)
@@ -871,7 +1160,7 @@ def get_adhoc_flamegraphs(
                 f.removed = f.s3_path not in existing_keys
 
         return flamegraph_files
-
+        
     except Exception as e:
         logger.error(f"Error fetching adhoc flamegraphs: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch adhoc flamegraph files")
@@ -888,21 +1177,26 @@ def get_adhoc_flamegraph_content(
     """
     try:
         s3_dal = S3ProfileDal(logger)
-
+        
         # Build full S3 path for flamegraph HTML files
-        s3_path = f"products/{service_name}/stacks/flamegraph/{filename}"
-
+        _prefix = _dev_config.S3_PATH_PREFIX
+        _root = f"{_prefix}/products" if _prefix else "products"
+        s3_path = f"{_root}/{service_name}/stacks/flamegraph/{filename}"
+        
         # Fetch file content from S3 (flamegraph HTML files are not gzipped)
         try:
             html_content = s3_dal.get_object(s3_path, is_gzip=False)
         except ClientError as e:
-            if e.response["Error"]["Code"] == "NoSuchKey":
+            if e.response['Error']['Code'] == 'NoSuchKey':
                 raise HTTPException(status_code=404, detail="Flamegraph file not found")
             else:
                 raise HTTPException(status_code=500, detail="Failed to fetch flamegraph content from S3")
-
-        return FlamegraphContent(content=html_content, filename=filename)
-
+        
+        return FlamegraphContent(
+            content=html_content,
+            filename=filename
+        )
+        
     except HTTPException:
         raise
     except Exception as e:

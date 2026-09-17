@@ -1,0 +1,72 @@
+# ClickHouse REST facade the webapp queries for flamegraph data. Serves HTTPS on
+# 4433 with a self-signed cert (mounted from the ch-rest-tls Secret the Makefile
+# creates from deploy/tls/); the webapp trusts it via REST_VERIFY_TLS=FALSE.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ch-rest-service
+  namespace: perf-studio
+  labels: { app: ch-rest-service }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: ch-rest-service }
+  template:
+    metadata:
+      labels: { app: ch-rest-service }
+    spec:
+      securityContext:
+        runAsUser: 888
+        runAsGroup: 888
+        fsGroup: 888
+      containers:
+        - name: ch-rest-service
+          image: gprofiler-ps/ch-rest-service:sandbox
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CLICKHOUSE_HOST
+              valueFrom: { configMapKeyRef: { name: studio-config, key: CLICKHOUSE_HOST } }
+            - name: CLICKHOUSE_USER
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: CLICKHOUSE_USER } }
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: CLICKHOUSE_PASSWORD } }
+            - name: REST_PASSWORD
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: REST_PASSWORD } }
+            # $(VAR) expands against env vars declared earlier in this list.
+            - name: CLICKHOUSE_ADDR
+              value: "$(CLICKHOUSE_HOST):9000?username=$(CLICKHOUSE_USER)&password=$(CLICKHOUSE_PASSWORD)"
+            - name: CLICKHOUSE_STACKS_TABLE
+              value: flamedb.samples
+            - name: CLICKHOUSE_METRICS_TABLE
+              value: flamedb.metrics
+            - name: BASIC_AUTH_CREDENTIALS
+              value: "user:$(REST_PASSWORD)"
+            - name: CERT_FILE_PATH
+              value: /tls/ch_rest_cert.pem
+            - name: KEY_FILE_PATH
+              value: /tls/ch_rest_key.pem
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: AWS_ACCESS_KEY_ID } }
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: studio-secrets, key: AWS_SECRET_ACCESS_KEY } }
+          ports:
+            - containerPort: 4433
+          volumeMounts:
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+      volumes:
+        - name: tls
+          secret:
+            secretName: ch-rest-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ch-rest-service
+  namespace: perf-studio
+spec:
+  selector: { app: ch-rest-service }
+  ports:
+    - port: 4433
+      targetPort: 4433

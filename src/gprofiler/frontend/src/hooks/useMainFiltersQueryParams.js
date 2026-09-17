@@ -43,10 +43,12 @@ const mapOperatorToQueryParam = {
 const mapEqualToQueryParam = {
     [FILTER_EQUALNESS.$eq.value]: 'is',
     [FILTER_EQUALNESS.$neq.value]: 'not',
+    [FILTER_EQUALNESS.$like.value]: 'has',
 };
 const mapQueryParamToEqual = {
     is: [FILTER_EQUALNESS.$eq.value],
     not: [FILTER_EQUALNESS.$neq.value],
+    has: [FILTER_EQUALNESS.$like.value],
 };
 
 const delimiter = ',';
@@ -115,9 +117,10 @@ const useMainFiltersQueryParams = ({ activeFilterTag, setActiveFilterTag }) => {
 
         if (filter) {
             const parsedFilter = parseQueryParamsToFilter(filter);
-            setTimeout(() => {
-                setActiveFilterTag({ id: '', filter: parsedFilter });
-            }, 3000);
+            // Apply the URL filter synchronously on mount. A previous 3s
+            // setTimeout here caused the view to load once unfiltered and then
+            // reload with the filter a beat later.
+            setActiveFilterTag({ id: '', filter: parsedFilter });
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);

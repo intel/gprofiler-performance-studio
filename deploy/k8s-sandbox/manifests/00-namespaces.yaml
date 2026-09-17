@@ -1,0 +1,30 @@
+# Namespaces for the k8s sandbox.
+#   perf-studio : the Performance Studio control plane + in-cluster test Jobs
+#   team-a / team-b : realistic tenant namespaces holding the workloads the
+#                     gProfiler agent DaemonSet enumerates over CRI. Having more
+#                     than one namespace is the whole point: it proves the
+#                     namespace/pod/container scope resolution against a real
+#                     cluster topology (which docker-compose cannot produce).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: perf-studio
+  labels:
+    app.kubernetes.io/part-of: gprofiler-performance-studio
+    gprofiler.sandbox/role: control-plane
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-a
+  labels:
+    app.kubernetes.io/part-of: gprofiler-performance-studio
+    gprofiler.sandbox/role: workload
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-b
+  labels:
+    app.kubernetes.io/part-of: gprofiler-performance-studio
+    gprofiler.sandbox/role: workload

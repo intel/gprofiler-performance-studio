@@ -91,6 +91,7 @@ const useFiltersQueryParams = ({
         wp: NumberParam,
     });
     const [isMounted, setMounted] = useState(false);
+    const [scalarFiltersApplied, setScalarFiltersApplied] = useState(false);
     const {
         rt: runtimeFilters,
         rtms: runTimeMixedStacks,
@@ -124,14 +125,34 @@ const useFiltersQueryParams = ({
         }
     }, [filters, handleFilterChange, location.pathname]);
 
+    // Runtime, mixed-stacks and weight filters do not depend on the flamegraph
+    // data, so restore them from the URL on mount even when the selected time
+    // window is empty (otherwise a deep link into an empty window drops them).
+    useEffect(() => {
+        if (scalarFiltersApplied || location.pathname !== PAGES.profiles.to) {
+            return;
+        }
+        if (runtimeFilters) {
+            setRuntimeFilters(parseQueryParamsToFilters(runtimeFilters));
+        }
+        if (runTimeMixedStacks && !filters.runtime.isMixedRuntimeStacksModeEnabled) {
+            setIsMixedRuntimeStacksModeEnabled();
+        }
+        if (weightThreshold) {
+            setWeightThreshold(weightThreshold);
+        }
+        if (weightPercentile) {
+            setWeightPercentile(weightPercentile);
+        }
+        setScalarFiltersApplied(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [location.pathname]);
+
+    // The process filter is stored as an inclusion/exclusion list and can only
+    // be resolved against the flamegraph's process list, so it must wait for
+    // data to arrive.
     useEffect(() => {
         if (!isMounted && filters.processes.processesList?.length > 0) {
-            if (runtimeFilters) {
-                setRuntimeFilters(parseQueryParamsToFilters(runtimeFilters));
-            }
-            if (runTimeMixedStacks && !filters.runtime.isMixedRuntimeStacksModeEnabled) {
-                setIsMixedRuntimeStacksModeEnabled();
-            }
             if (processes?.length > 0) {
                 let proccessListValues = filters.processes.processesList.map((proccess) => proccess.value);
                 let approvedFilters = [];
@@ -146,12 +167,6 @@ const useFiltersQueryParams = ({
                         .map((filter) => filter.value);
                 }
                 setProcessesFilters(approvedFilters);
-            }
-            if (weightThreshold) {
-                setWeightThreshold(weightThreshold);
-            }
-            if (weightPercentile) {
-                setWeightPercentile(weightPercentile);
             }
             setMounted(true);
         }

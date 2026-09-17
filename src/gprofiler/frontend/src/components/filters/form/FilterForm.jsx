@@ -136,7 +136,11 @@ const FilterForm = ({ postCreateCallback, onClose, valueOptions, valueOptionsLoa
                             <FilterOptionsSelect
                                 value={value || ''}
                                 options={valueOptions[type]}
-                                disabled={valueOptionsLoading[type] || _.isEmpty(valueOptions[type])}
+                                freeSolo={equal === FILTER_EQUALNESS.$like.value}
+                                disabled={
+                                    valueOptionsLoading[type] ||
+                                    (equal !== FILTER_EQUALNESS.$like.value && _.isEmpty(valueOptions[type]))
+                                }
                                 loading={valueOptionsLoading[type]}
                                 onChange={onFilterValueChange(index)}
                             />

@@ -17,7 +17,7 @@ import gzip
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from io import BytesIO
-from typing import Callable, Dict, List, Optional, Set
+from typing import Callable, Optional, List, Dict, Set
 
 import boto3
 from botocore.config import Config
@@ -39,7 +39,8 @@ class S3ProfileDal:
     ):
         self.logger = logger
         self.bucket_name = config.BUCKET_NAME
-        self.base_directory = config.BASE_DIRECTORY
+        _prefix = config.S3_PATH_PREFIX
+        self.base_directory = f"{_prefix}/{config.BASE_DIRECTORY}" if _prefix else config.BASE_DIRECTORY
         self.input_folder_name = input_folder_name
         if session is None:
             with boto3_lock:
@@ -50,9 +51,7 @@ class S3ProfileDal:
                 )
         # endpoint_url allows connecting to LocalStack or S3-compatible services for testing
         # When None (default), uses standard AWS S3 endpoints
-        self._s3_client = session.client(
-            "s3", config=Config(max_pool_connections=50), endpoint_url=config.S3_ENDPOINT_URL
-        )
+        self._s3_client = session.client("s3", config=Config(max_pool_connections=50), endpoint_url=config.S3_ENDPOINT_URL)
         self._s3_resource = session.resource("s3", endpoint_url=config.S3_ENDPOINT_URL)
 
     @staticmethod
@@ -124,15 +123,22 @@ class S3ProfileDal:
         return existing
 
     def list_files_with_prefix(self, prefix: str) -> List[Dict]:
-        """List files in S3 with the given prefix."""
+        """List files in S3 with the given prefix"""
         try:
-            response = self._s3_client.list_objects_v2(Bucket=self.bucket_name, Prefix=prefix)
-
+            response = self._s3_client.list_objects_v2(
+                Bucket=self.bucket_name,
+                Prefix=prefix
+            )
+            
             files = []
-            if "Contents" in response:
-                for obj in response["Contents"]:
-                    files.append({"Key": obj["Key"], "Size": obj["Size"], "LastModified": obj["LastModified"]})
-
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    files.append({
+                        'Key': obj['Key'],
+                        'Size': obj['Size'],
+                        'LastModified': obj['LastModified']
+                    })
+            
             return files
         except Exception as e:
             self.logger.error(f"Error listing files with prefix {prefix}: {e}")
