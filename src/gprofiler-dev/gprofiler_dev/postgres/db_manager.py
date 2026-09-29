@@ -460,9 +460,11 @@ class DBManager(metaclass=Singleton):
                 fetch_all=True,
             )
             if not res:
-                return res
+                return {"avg_cores": None, "avg_nodes": None}
             intervals = [(elem["first_seen"], elem["last_seen"]) for elem in res]
             total_seconds = get_total_seconds_from_intervals(intervals)
+            if total_seconds == 0:
+                return {"avg_cores": None, "avg_nodes": None}
 
         values["total_seconds"] = total_seconds
         if hostname:
