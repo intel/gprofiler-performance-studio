@@ -17,7 +17,7 @@
 }
 
 import _ from 'lodash';
-import { stringify } from 'query-string';
+import queryString from 'query-string';
 import { useContext, useEffect, useState } from 'react';
 
 import { DATA_URLS } from '../../api/urls';
@@ -36,7 +36,7 @@ const useGetDatesTimesWithData = (primarySelectedTime) => {
         run,
     } = useFetchWithRequest(
         {
-            url: `${DATA_URLS.GET_FLAMEGRAPH_DATETIME_WITH_DATA}?${stringify({
+            url: `${DATA_URLS.GET_FLAMEGRAPH_DATETIME_WITH_DATA}?${queryString.stringify({
                 serviceName: selectedService,
                 filter: activeFilterTag?.filter ? JSON.stringify(activeFilterTag) : undefined,
             })}`,

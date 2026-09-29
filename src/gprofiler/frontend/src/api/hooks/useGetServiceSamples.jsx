@@ -17,7 +17,7 @@
 }
 
 import _ from 'lodash';
-import { stringify } from 'query-string';
+import queryString from 'query-string';
 import { useContext } from 'react';
 
 import { FilterTagsContext } from '../../states/filters/FiltersTagsContext';
@@ -43,7 +43,7 @@ const useGetServiceSamples = ({ resolution }) => {
     const timeParams = getStartEndDateTimeFromSelection(timeSelection);
     const { data: samplesData, loading: samplesLoading } = useFetchWithRequest(
         {
-            url: DATA_URLS.GET_SAMPLES + '?' + stringify(_.assign({ ...timeParams }, metricsParams)),
+            url: DATA_URLS.GET_SAMPLES + '?' + queryString.stringify(_.assign({ ...timeParams }, metricsParams)),
         },
         {
             refreshDeps: [selectedService, timeSelection, resolution],

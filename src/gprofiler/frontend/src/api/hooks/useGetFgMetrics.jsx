@@ -17,7 +17,7 @@
 }
 
 import _ from 'lodash';
-import { stringify } from 'query-string';
+import queryString from 'query-string';
 import { useContext, useState } from 'react';
 
 import { isFilterTypeExist } from '@/components/filters/utils';
@@ -51,7 +51,7 @@ const useGetFgMetrics = ({ customTimeSelection, customService, disableCoreNodesR
 
     const { loading: metricsLoading } = useFetchWithRequest(
         {
-            url: DATA_URLS.GET_METRICS + '?' + stringify(metricsParams),
+            url: DATA_URLS.GET_METRICS + '?' + queryString.stringify(metricsParams),
         },
         {
             refreshDeps: [
@@ -73,7 +73,7 @@ const useGetFgMetrics = ({ customTimeSelection, customService, disableCoreNodesR
     const isHostNameFilterActive = isFilterTypeExist(FILTER_TYPES.HostName.value, activeFilterTag);
     const { loading: lastHtmlLoading } = useFetchWithRequest(
         {
-            url: DATA_URLS.GET_LAST_HTML + '?' + stringify(metricsParams),
+            url: DATA_URLS.GET_LAST_HTML + '?' + queryString.stringify(metricsParams),
         },
         {
             refreshDeps: [
@@ -99,12 +99,16 @@ const useGetFgMetrics = ({ customTimeSelection, customService, disableCoreNodesR
         serviceName: customService || selectedService,
         ignoreZeros: ignoreZeros,
         ...timeParams,
-        ...(!isServiceView ? { filter: activeFilterTag?.filter ? JSON.stringify(activeFilterTag) : undefined } : {}),
+        ...(!isServiceView
+            ? {
+                  filter: activeFilterTag?.filter ? JSON.stringify(activeFilterTag) : undefined,
+              }
+            : {}),
     };
 
     const { loading: coresNodesCountLoading } = useFetchWithRequest(
         {
-            url: DATA_URLS.GET_NODES_AND_CORES + '?' + stringify(serviceAndTimeParams),
+            url: DATA_URLS.GET_NODES_AND_CORES + '?' + queryString.stringify(serviceAndTimeParams),
         },
         {
             refreshDeps: [
@@ -129,7 +133,7 @@ const useGetFgMetrics = ({ customTimeSelection, customService, disableCoreNodesR
 
     const { loading: instanceTypeDataLoading } = useFetchWithRequest(
         {
-            url: DATA_URLS.GET_INSTANCE_TYPE + '?' + stringify(serviceAndTimeParams),
+            url: DATA_URLS.GET_INSTANCE_TYPE + '?' + queryString.stringify(serviceAndTimeParams),
         },
         {
             refreshDeps: [selectedService, customService, customTimeSelection ? customTimeSelection : timeSelection],

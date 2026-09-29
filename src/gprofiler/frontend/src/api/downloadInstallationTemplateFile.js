@@ -17,7 +17,7 @@
 }
 
 import _ from 'lodash';
-import { stringify } from 'query-string';
+import queryString from 'query-string';
 
 import { getJSON } from './utils';
 
@@ -39,7 +39,7 @@ const downloadInstallationTemplateFile = async (
         const queryData = { serviceName, namespace };
         let result;
         setIsLoading(true);
-        const url = `/api/installations/${type}/file?${stringify(queryData)}`;
+        const url = `/api/installations/${type}/file?${queryString.stringify(queryData)}`;
         const response = await fetch(url, {
             headers: { 'Content-Type': 'application/json' },
             method: 'GET',

@@ -17,7 +17,7 @@
 }
 
 import _ from 'lodash';
-import { stringify } from 'query-string';
+import queryString from 'query-string';
 import { useContext, useEffect } from 'react';
 
 import { FgContext, SelectorsContext } from '../../states';
@@ -48,7 +48,7 @@ const useGetFgData = ({ disableLastWeekFetch = false }) => {
     const timeParams = getStartEndDateTimeFromSelection(timeSelection);
     const { data, loading, error } = useFetchWithRequest(
         {
-            url: `${DATA_URLS.GET_FLAMEGRAPH}?${stringify(_.assign({ ...timeParams }, fgParams))}`,
+            url: `${DATA_URLS.GET_FLAMEGRAPH}?${queryString.stringify(_.assign({ ...timeParams }, fgParams))}`,
         },
         {
             refreshDeps: [selectedService, timeSelection, viewTruncated, JSON.stringify(activeFilterTag)],
@@ -72,7 +72,7 @@ const useGetFgData = ({ disableLastWeekFetch = false }) => {
         run: lastWeekRun,
     } = useFetchWithRequest(
         {
-            url: `${DATA_URLS.GET_FLAMEGRAPH}?${stringify(_.assign({ ...weeklyParams }, fgParams))}`,
+            url: `${DATA_URLS.GET_FLAMEGRAPH}?${queryString.stringify(_.assign({ ...weeklyParams }, fgParams))}`,
         },
         { manual: true }
     );

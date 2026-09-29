@@ -18,7 +18,7 @@
 
 import { ListItemIcon, ListItemText } from '@mui/material';
 import MenuItem from '@mui/material/MenuItem';
-import { stringify } from 'query-string';
+import queryString from 'query-string';
 import { useCallback, useContext, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
 
@@ -41,7 +41,7 @@ const DownloadLink = ({ serviceName, timeSelection, activeFilters, fileType, dow
 
     return (
         <a
-            href={`${DATA_URLS.DOWNLOAD_FLAMEGRAPH}${fileType}/?${stringify({
+            href={`${DATA_URLS.DOWNLOAD_FLAMEGRAPH}${fileType}/?${queryString.stringify({
                 serviceName,
                 ...timeParams,
                 filter: JSON.stringify(activeFilters),

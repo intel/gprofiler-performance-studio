@@ -16,7 +16,7 @@
      */
 }
 
-import { stringify } from 'query-string';
+import queryString from 'query-string';
 
 const API_PREFIX = '/api';
 const FILETERS_PREFIX = '/v1/filters';
@@ -50,7 +50,7 @@ export const DATA_URLS = {
     // Filter endpoints
     FILTERS: `${API_PREFIX}${FILETERS_PREFIX}`,
     GET_FILTER_OPTIONS_VALUE: (filterType, params) =>
-        `${API_PREFIX}${FILETERS_PREFIX}/tags/${filterType}?${stringify(params)}`,
+        `${API_PREFIX}${FILETERS_PREFIX}/tags/${filterType}?${queryString.stringify(params)}`,
     GET_FILTERS_FOR_SERVICE: (selectedService) => `${API_PREFIX}${FILETERS_PREFIX}/service/${selectedService}`,
     SNAPSHOT: `${API_PREFIX}/snapshots`,
 };

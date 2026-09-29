@@ -34,7 +34,7 @@ import {
     Typography,
 } from '@mui/material';
 import { format } from 'date-fns';
-import { stringify } from 'query-string';
+import queryString from 'query-string';
 import { useContext, useEffect, useState } from 'react';
 
 import { DATA_URLS } from '@/api/urls';
@@ -62,7 +62,7 @@ const AdhocProfilingView = () => {
         run: fetchFiles,
     } = useFetchWithRequest(
         {
-            url: `${DATA_URLS.GET_ADHOC_FLAMEGRAPHS}?${stringify({
+            url: `${DATA_URLS.GET_ADHOC_FLAMEGRAPHS}?${queryString.stringify({
                 serviceName: selectedService,
                 ...timeParams,
                 filter: activeFilterTag?.filter ? JSON.stringify(activeFilterTag) : undefined,
@@ -78,7 +78,7 @@ const AdhocProfilingView = () => {
         run: fetchFileContent,
     } = useFetchWithRequest(
         {
-            url: `${DATA_URLS.GET_ADHOC_FLAMEGRAPH_CONTENT}?${stringify({
+            url: `${DATA_URLS.GET_ADHOC_FLAMEGRAPH_CONTENT}?${queryString.stringify({
                 serviceName: selectedService,
                 filename: selectedFile?.filename,
             })}`,
@@ -195,7 +195,10 @@ const AdhocProfilingView = () => {
                                 <TableBody>
                                     {filesData.map((file) => {
                                         const removedCellSx = file.removed
-                                            ? { textDecoration: 'line-through', color: 'text.disabled' }
+                                            ? {
+                                                  textDecoration: 'line-through',
+                                                  color: 'text.disabled',
+                                              }
                                             : {};
                                         return (
                                             <TableRow
@@ -262,7 +265,12 @@ const AdhocProfilingView = () => {
                                 overflow: 'hidden',
                             }}>
                             <iframe
-                                style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    border: 'none',
+                                    display: 'block',
+                                }}
                                 title='Adhoc Flamegraph'
                                 srcDoc={selectedFileContent}
                                 sandbox='allow-scripts allow-same-origin'
