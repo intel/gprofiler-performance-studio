@@ -18,7 +18,7 @@
 
 import { Grid } from '@mui/material';
 import { useCallback, useContext, useState } from 'react';
-import useResizeObserver from 'use-resize-observer';
+import { useResizeObserver } from 'use-resize-observer';
 
 import FgMenu from '@/components/profiles/views/flamegraph/FgMenu';
 import { addOrRemoveNodeFromArray } from '@/components/profiles/views/flamegraph/parsingUtils';

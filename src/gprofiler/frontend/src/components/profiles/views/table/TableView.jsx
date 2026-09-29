@@ -19,7 +19,7 @@
 import { Box } from '@mui/material';
 import PropTypes from 'prop-types';
 import { memo, useEffect, useMemo, useState } from 'react';
-import useResizeObserver from 'use-resize-observer';
+import { useResizeObserver } from 'use-resize-observer';
 
 import MuiTable from '@/components/common/dataDisplay/table/MuiTable';
 import Flexbox from '@/components/common/layout/Flexbox';
