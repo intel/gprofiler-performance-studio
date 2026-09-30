@@ -17,7 +17,7 @@
 }
 
 import _ from 'lodash';
-import { stringify } from 'query-string';
+import queryString from 'query-string';
 import { useContext } from 'react';
 
 import { FilterTagsContext } from '../../states/filters/FiltersTagsContext';
@@ -46,7 +46,7 @@ const useGetServiceMemoryAndCpu = ({ resolution }) => {
         run: callMemoryAndCpuGraph,
     } = useFetchWithRequest(
         {
-            url: DATA_URLS.GET_GRAPH_METRICS + '?' + stringify(_.assign({ ...timeParams }, metricsParams)),
+            url: DATA_URLS.GET_GRAPH_METRICS + '?' + queryString.stringify(_.assign({ ...timeParams }, metricsParams)),
         },
         {
             refreshDeps: [selectedService, timeSelection, resolution],

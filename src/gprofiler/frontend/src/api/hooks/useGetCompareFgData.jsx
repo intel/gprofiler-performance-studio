@@ -17,7 +17,7 @@
 }
 
 import _ from 'lodash';
-import { stringify } from 'query-string';
+import queryString from 'query-string';
 
 import { DATA_URLS } from '../urls';
 import useFetchWithRequest from '../useFetchWithRequest';
@@ -35,13 +35,16 @@ const useGetCompareFgData = ({ timeSelection, service, setAbsoluteCompareTime })
     const timeParams = getStartEndDateTimeFromSelection(timeSelection);
     const { data, loading, error } = useFetchWithRequest(
         {
-            url: `${DATA_URLS.GET_FLAMEGRAPH}?${stringify(_.assign({ ...timeParams }, fgParams))}`,
+            url: `${DATA_URLS.GET_FLAMEGRAPH}?${queryString.stringify(_.assign({ ...timeParams }, fgParams))}`,
         },
         {
             refreshDeps: [service, timeSelection],
             ready: areParamsDefined(service, timeSelection),
             onSuccess: () => {
-                setAbsoluteCompareTime({ cStartTime: timeParams.startTime, cEndTime: timeParams.endTime });
+                setAbsoluteCompareTime({
+                    cStartTime: timeParams.startTime,
+                    cEndTime: timeParams.endTime,
+                });
             },
         }
     );

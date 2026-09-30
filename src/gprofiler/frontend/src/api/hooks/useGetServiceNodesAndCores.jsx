@@ -17,7 +17,7 @@
 }
 
 import _ from 'lodash';
-import { stringify } from 'query-string';
+import queryString from 'query-string';
 import { useContext } from 'react';
 
 import { FilterTagsContext } from '@/states/filters/FiltersTagsContext';
@@ -50,7 +50,7 @@ const useGetServiceNodesAndCores = ({ resolution = null }) => {
             url:
                 DATA_URLS.GET_NODES_AND_CORES_GRAPH_METRICS +
                 '?' +
-                stringify(_.assign({ ...timeParams }, metricsParams)),
+                queryString.stringify(_.assign({ ...timeParams }, metricsParams)),
         },
         {
             refreshDeps: [selectedService, timeSelection, resolution],

@@ -19,15 +19,15 @@
 import { CssBaseline } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
 import { ErrorBoundary } from 'react-error-boundary';
-import { Route } from 'react-router-dom';
-import { QueryParamProvider, transformSearchStringJsonSafe } from 'use-query-params';
+import { objectToSearchString, QueryParamProvider, transformSearchStringJsonSafe } from 'use-query-params';
+import { ReactRouter5Adapter } from 'use-query-params/adapters/react-router-5';
 
 import ErrorFallback from './components/common/feedback/ErrorFallback';
 import Console from './components/console/Console';
 import theme from './theme/theme';
 
-const queryStringifyOptions = {
-    transformSearchString: transformSearchStringJsonSafe,
+const queryParamOptions = {
+    objectToSearchString: (query) => transformSearchStringJsonSafe(objectToSearchString(query)),
 };
 
 function App() {
@@ -35,7 +35,7 @@ function App() {
         <ThemeProvider theme={theme}>
             <CssBaseline />
             <ErrorBoundary FallbackComponent={ErrorFallback}>
-                <QueryParamProvider ReactRouterRoute={Route} stringifyOptions={queryStringifyOptions}>
+                <QueryParamProvider adapter={ReactRouter5Adapter} options={queryParamOptions}>
                     <Console />
                 </QueryParamProvider>
             </ErrorBoundary>

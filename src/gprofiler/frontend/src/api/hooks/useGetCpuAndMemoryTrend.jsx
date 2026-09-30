@@ -17,7 +17,7 @@
 }
 
 import _ from 'lodash';
-import { stringify } from 'query-string';
+import queryString from 'query-string';
 import { useContext } from 'react';
 
 import { FilterTagsContext } from '../../states/filters/FiltersTagsContext';
@@ -45,7 +45,7 @@ const useGetCpuAndMemoryTrend = () => {
             url:
                 DATA_URLS.GET_METRICS_CPU_AND_MEMORY_TREND +
                 '?' +
-                stringify(_.assign({ ...timeParams }, metricsParams)),
+                queryString.stringify(_.assign({ ...timeParams }, metricsParams)),
         },
         {
             refreshDeps: [selectedService, timeSelection, activeFilterTag],

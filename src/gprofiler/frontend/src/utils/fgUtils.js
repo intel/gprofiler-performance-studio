@@ -17,14 +17,17 @@
 }
 
 import _ from 'lodash';
-import { parse, stringify } from 'query-string';
+import queryString from 'query-string';
 
 import { getStartEndDateTimeFromSelection } from '../api/utils';
 import { PAGES } from './consts';
 import { subDate, TIME_UNITS } from './datetimesUtils';
 import { getRuntimesFunctionNameRegex, STACK_TYPES, STACKS_MAP } from './filtersUtils';
 
-const unknownNode = { name: STACKS_MAP.Other.name, color: STACKS_MAP.Other.color };
+const unknownNode = {
+    name: STACKS_MAP.Other.name,
+    color: STACKS_MAP.Other.color,
+};
 const DEPTH_LIMIT = 800;
 const isTruncatedNode = (nodeName) => nodeName.endsWith('_[t]');
 
@@ -334,7 +337,7 @@ const addMatched = (flamegraphObject) => {
 };
 
 export const buildPermaLink = (timeSelection, search, snapshotId = '') => {
-    let shareableLinkParams = parse(search);
+    let shareableLinkParams = queryString.parse(search);
     const isRelativeTimeInParams = _.includes(_.keys(shareableLinkParams), 'time');
 
     if (isRelativeTimeInParams) {
@@ -347,29 +350,32 @@ export const buildPermaLink = (timeSelection, search, snapshotId = '') => {
 
     // replace old snapshotId from url
     if (snapshotId) {
-        shareableLinkParams = { ..._.omit(shareableLinkParams, ['snapshot']), snapshot: snapshotId };
+        shareableLinkParams = {
+            ..._.omit(shareableLinkParams, ['snapshot']),
+            snapshot: snapshotId,
+        };
     }
-    let shareableLink = `${window.location.protocol}//${window.location.host}${PAGES.profiles.to}?${stringify(
-        shareableLinkParams
-    )}`;
+    let shareableLink = `${window.location.protocol}//${window.location.host}${
+        PAGES.profiles.to
+    }?${queryString.stringify(shareableLinkParams)}`;
     return shareableLink;
 };
 
 export const buildAbsolutePermaLink = (timeSelection, search) => {
-    let shareableLinkParams = parse(search);
+    let shareableLinkParams = queryString.parse(search);
     shareableLinkParams = {
         ..._.omit(shareableLinkParams, ['time', 'startTime', 'endTime']),
         ...timeSelection,
     };
 
-    let shareableLink = `${window.location.protocol}//${window.location.host}${PAGES.profiles.to}?${stringify(
-        shareableLinkParams
-    )}`;
+    let shareableLink = `${window.location.protocol}//${window.location.host}${
+        PAGES.profiles.to
+    }?${queryString.stringify(shareableLinkParams)}`;
     return shareableLink;
 };
 
 export const buildComparisonPermaLink = (timeSelection, compareTimeSelection, search) => {
-    let shareableLinkParams = parse(search);
+    let shareableLinkParams = queryString.parse(search);
 
     shareableLinkParams = {
         ..._.omit(shareableLinkParams, ['time', 'cTime', 'startTime', 'endTime', 'cStartTime', 'cEndTime']),
@@ -377,9 +383,9 @@ export const buildComparisonPermaLink = (timeSelection, compareTimeSelection, se
         ...compareTimeSelection,
     };
 
-    let shareableLink = `${window.location.protocol}//${window.location.host}${PAGES.comparison.to}?${stringify(
-        shareableLinkParams
-    )}`;
+    let shareableLink = `${window.location.protocol}//${window.location.host}${
+        PAGES.comparison.to
+    }?${queryString.stringify(shareableLinkParams)}`;
     return shareableLink;
 };
 

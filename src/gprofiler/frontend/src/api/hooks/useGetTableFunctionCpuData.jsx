@@ -17,7 +17,7 @@
 }
 
 import _ from 'lodash';
-import { stringify } from 'query-string';
+import queryString from 'query-string';
 import { useContext, useState } from 'react';
 
 import { FilterTagsContext } from '../../states/filters/FiltersTagsContext';
@@ -44,7 +44,10 @@ const useGetTableFunctionCpuData = ({ functionName, customService, customTimeSel
     const timeParams = getStartEndDateTimeFromSelection(customTimeSelection || timeSelection);
     const { data: functionCpuData, loading: functionCpuLoading } = useFetchWithRequest(
         {
-            url: DATA_URLS.GET_FUCNTION_CPU_GRAPH + '?' + stringify(_.assign({ ...timeParams }, metricsParams)),
+            url:
+                DATA_URLS.GET_FUCNTION_CPU_GRAPH +
+                '?' +
+                queryString.stringify(_.assign({ ...timeParams }, metricsParams)),
         },
         {
             refreshDeps: [
@@ -61,7 +64,10 @@ const useGetTableFunctionCpuData = ({ functionName, customService, customTimeSel
             onSuccess: (result) => {
                 setParsedData(
                     result.map((cpuData) => {
-                        return { cpu_percentage: cpuData.cpu_percentage * 100, time: cpuData.time };
+                        return {
+                            cpu_percentage: cpuData.cpu_percentage * 100,
+                            time: cpuData.time,
+                        };
                     })
                 );
             },
