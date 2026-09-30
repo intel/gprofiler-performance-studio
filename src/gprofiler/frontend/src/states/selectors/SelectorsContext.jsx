@@ -37,10 +37,14 @@ export const SelectorsProvider = ({ children }) => {
     const [ignoreZeros, setIgnoreZeros] = useState(true);
     const [selectedServiceEnvType, setSelectedServiceEnvType] = useState('');
 
-    const [timeSelection, setTimeSelection] = useState({ relativeTime: DEFAULT_INITIAL_TIME_RANGE_FILTER });
+    const [timeSelection, setTimeSelectionState] = useState({ relativeTime: DEFAULT_INITIAL_TIME_RANGE_FILTER });
     const [absoluteTimeSelection, setAbsoluteTimeSelection] = useState({ startTime: '', endTime: '' });
 
     const [timeFetched, setTimeFetched] = useState(undefined);
+    const setTimeSelection = useTimePickQueryParams({
+        setTimeSelection: setTimeSelectionState,
+        timeSelection,
+    });
     const resetSelectedTimeRange = () => {
         setTimeSelection({ relativeTime: DEFAULT_INITIAL_TIME_RANGE_FILTER });
     };
@@ -58,11 +62,6 @@ export const SelectorsProvider = ({ children }) => {
             setSelectedServiceEnvType('');
         }
     }, [selectedService, services]);
-
-    useTimePickQueryParams({
-        setTimeSelection,
-        timeSelection,
-    });
 
     useGraphViewQueryParams({ viewMode, setViewMode });
     useGraphTabQueryParams({ selectedGraphTab, setSelectedGraphTab });

@@ -46,28 +46,40 @@ const useTimePickQueryParams = ({ setTimeSelection, timeSelection, customQueryPa
     const startTime = queryParams[START_TIME_QUERY];
     const endTime = queryParams[END_TIME_QUERY];
 
-    const handleTimeChange = useCallback(() => {
-        if (timeSelection.relativeTime) {
-            setQueryParams({
-                [TIME_QUERY]: MAP_TIME_TO_FILTER_QUERY[timeSelection.relativeTime],
-                [START_TIME_QUERY]: undefined,
-                [END_TIME_QUERY]: undefined,
-            });
-        } else if (timeSelection.customTime) {
-            setQueryParams({
-                [TIME_QUERY]: undefined,
-                [START_TIME_QUERY]: timeSelection.customTime?.startTime?.toISOString(),
-                [END_TIME_QUERY]: timeSelection.customTime?.endTime?.toISOString(),
-            });
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [setQueryParams, timeSelection]);
+    const updateTimeQueryParams = useCallback(
+        (newTimeSelection, updateType) => {
+            if (newTimeSelection.relativeTime) {
+                setQueryParams(
+                    {
+                        [TIME_QUERY]: MAP_TIME_TO_FILTER_QUERY[newTimeSelection.relativeTime],
+                        [START_TIME_QUERY]: undefined,
+                        [END_TIME_QUERY]: undefined,
+                    },
+                    updateType
+                );
+            } else if (newTimeSelection.customTime) {
+                setQueryParams(
+                    {
+                        [TIME_QUERY]: undefined,
+                        [START_TIME_QUERY]: newTimeSelection.customTime?.startTime?.toISOString(),
+                        [END_TIME_QUERY]: newTimeSelection.customTime?.endTime?.toISOString(),
+                    },
+                    updateType
+                );
+            }
+        },
+        [END_TIME_QUERY, START_TIME_QUERY, TIME_QUERY, setQueryParams]
+    );
 
-    useEffect(() => {
-        if (location.pathname === PAGES.profiles.to || location.pathname === PAGES.comparison.to) {
-            handleTimeChange();
-        }
-    }, [timeSelection, handleTimeChange, location.pathname]);
+    const setTimeSelectionFromUser = useCallback(
+        (newTimeSelection) => {
+            setTimeSelection(newTimeSelection);
+            if (location.pathname === PAGES.profiles.to || location.pathname === PAGES.comparison.to) {
+                updateTimeQueryParams(newTimeSelection, 'pushIn');
+            }
+        },
+        [location.pathname, setTimeSelection, updateTimeQueryParams]
+    );
 
     useEffect(() => {
         if (time || (startTime && endTime)) {
@@ -79,8 +91,19 @@ const useTimePickQueryParams = ({ setTimeSelection, timeSelection, customQueryPa
                 setTimeSelection({ relativeTime: DEFAULT_INITIAL_TIME_RANGE_FILTER });
             }
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [endTime, setTimeSelection, startTime, time]);
+
+    useEffect(() => {
+        if (
+            (location.pathname === PAGES.profiles.to || location.pathname === PAGES.comparison.to) &&
+            !time &&
+            !(startTime && endTime)
+        ) {
+            updateTimeQueryParams(timeSelection, 'replaceIn');
+        }
+    }, [endTime, location.pathname, startTime, time, timeSelection, updateTimeQueryParams]);
+
+    return setTimeSelectionFromUser;
 };
 
 export default useTimePickQueryParams;

@@ -47,14 +47,14 @@ const ComparisonPage = memo(() => {
         customParam: 'cService',
     });
 
-    const [compareTimeSelection, setCompareTimeSelection] = useState({
+    const [compareTimeSelection, setCompareTimeSelectionState] = useState({
         relativeTime: DEFAULT_INITIAL_TIME_RANGE_FILTER,
     });
 
     const [absoluteCompareTime, setAbsoluteCompareTime] = useState({ cStartTime: '', cEndTime: '' });
 
-    useTimePickQueryParams({
-        setTimeSelection: setCompareTimeSelection,
+    const setCompareTimeSelection = useTimePickQueryParams({
+        setTimeSelection: setCompareTimeSelectionState,
         timeSelection: compareTimeSelection,
         customQueryParams: { time: 'cTime', start: 'cStartTime', end: 'cEndTime' },
     });
