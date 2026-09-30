@@ -28,6 +28,7 @@ import theme from './theme/theme';
 
 const queryParamOptions = {
     objectToSearchString: (query) => transformSearchStringJsonSafe(objectToSearchString(query)),
+    updateType: 'replaceIn',
 };
 
 function App() {
