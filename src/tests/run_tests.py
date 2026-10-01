@@ -207,14 +207,11 @@ def main():
     """Main function to run tests with parsed arguments."""
     args = parse_arguments()
 
-    print("🧪 Running tests with configuration:")
+    print("🧪 Running tests:")
     print("=" * 50)
 
     # Build pytest arguments
     pytest_args = build_pytest_args(args)
-
-    print(f"\n📋 Pytest command: pytest {' '.join(pytest_args)}")
-    print("=" * 50)
 
     # Run pytest
     exit_code = pytest.main(pytest_args)
