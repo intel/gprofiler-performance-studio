@@ -17,7 +17,6 @@
 package handlers
 
 import (
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -48,13 +47,13 @@ var MetricsQueryParser = rql.MustNewParser(rql.Config{
 })
 
 func (h Handlers) GetFlamegraph(c *gin.Context) {
-	params, query, err := parseParams(common.FlameGraphParams{}, QueryParser, c)
+	params, filterQuery, err := parseParams(common.FlameGraphParams{}, QueryParser, c)
 	if err != nil {
 		return
 	}
 
 	start := c.GetTime("requestStartTime")
-	graph, err := h.ChClient.GetTopFrames(c.Request.Context(), params, query)
+	graph, err := h.ChClient.GetTopFrames(c.Request.Context(), params, filterQuery)
 	if err != nil {
 		c.String(http.StatusInternalServerError, err.Error())
 		return
@@ -111,7 +110,7 @@ func (h Handlers) GetFlamegraph(c *gin.Context) {
 
 func (h Handlers) QueryMeta(c *gin.Context) {
 	var response ExecTimeInterface
-	params, query, err := parseParams(common.QueryParams{}, QueryParser, c)
+	params, filterQuery, err := parseParams(common.QueryParams{}, QueryParser, c)
 	if err != nil {
 		return
 	}
@@ -131,34 +130,34 @@ func (h Handlers) QueryMeta(c *gin.Context) {
 	switch params.LookupFor {
 	case "HostName", "hostname", "InstanceType", "instance_type":
 		response = &FieldValueSampleResponse{
-			Result: h.ChClient.FetchFieldValues(ctx, mapping[params.LookupFor], params, query),
+			Result: h.ChClient.FetchFieldValues(ctx, mapping[params.LookupFor], params, filterQuery),
 		}
 	case "ContainerEnvName", "k8s_obj", "ContainerName", "container":
 		response = &FieldValueSampleResponse{
-			Result: h.ChClient.FetchFieldValueSample(ctx, mapping[params.LookupFor], params, query),
+			Result: h.ChClient.FetchFieldValueSample(ctx, mapping[params.LookupFor], params, filterQuery),
 		}
 
 	case "instance_type_count":
 		response = &InstanceTypeCountResponse{
-			Result: h.ChClient.FetchInstanceTypeCount(ctx, params, query),
+			Result: h.ChClient.FetchInstanceTypeCount(ctx, params, filterQuery),
 		}
 
 	case "time":
 		response = &QueryResponse{
-			Result: h.ChClient.FetchTimes(ctx, params, query),
+			Result: h.ChClient.FetchTimes(ctx, params, filterQuery),
 		}
 	case "time_range":
 		response = &QueryResponse{
-			Result: h.ChClient.FetchTimeRange(ctx, params, query),
+			Result: h.ChClient.FetchTimeRange(ctx, params, filterQuery),
 		}
 	case "samples":
 		response = &SampleCountResponse{
-			Result: h.ChClient.FetchSampleCount(ctx, params, query),
+			Result: h.ChClient.FetchSampleCount(ctx, params, filterQuery),
 		}
 	case "samples_count_by_function":
 		if len(params.FunctionName) > 0 {
 			response = &SampleCountByFunctionResponse{
-				Result: h.ChClient.FetchSampleCountByFunction(ctx, params, query),
+				Result: h.ChClient.FetchSampleCountByFunction(ctx, params, filterQuery),
 			}
 		} else {
 			c.JSON(http.StatusBadRequest, "missing function name")
@@ -187,13 +186,13 @@ func (h Handlers) QueryServices(c *gin.Context) {
 }
 
 func (h Handlers) QuerySessionsCount(c *gin.Context) {
-	params, query, err := parseParams(common.SessionsCountParams{}, QueryParser, c)
+	params, filterQuery, err := parseParams(common.SessionsCountParams{}, QueryParser, c)
 	if err != nil {
 		return
 	}
 	ctx := c.Request.Context()
 	response := SessionsResponse{}
-	result, err := h.ChClient.FetchSessionsCount(ctx, params, query)
+	result, err := h.ChClient.FetchSessionsCount(ctx, params, filterQuery)
 	response.SetExecTime(c.GetTime("requestStartTime"))
 	if err == nil {
 		response.Result = result
@@ -204,13 +203,13 @@ func (h Handlers) QuerySessionsCount(c *gin.Context) {
 }
 
 func (h Handlers) GetMetricsSummary(c *gin.Context) {
-	params, query, err := parseParams(common.MetricsSummaryParams{}, MetricsQueryParser, c)
+	params, filterQuery, err := parseParams(common.MetricsSummaryParams{}, MetricsQueryParser, c)
 	if err != nil {
 		return
 	}
 	ctx := c.Request.Context()
 
-	if fetchResponse, err := h.ChClient.FetchMetricsSummary(ctx, params, query); err != nil {
+	if fetchResponse, err := h.ChClient.FetchMetricsSummary(ctx, params, filterQuery); err != nil {
 		log.Print(err)
 		c.Status(http.StatusNoContent)
 		return
@@ -251,13 +250,13 @@ func (h Handlers) GetMetricsServicesListSummary(c *gin.Context) {
 }
 
 func (h Handlers) GetMetricsGraph(c *gin.Context) {
-	params, query, err := parseParams(common.MetricsSummaryParams{}, MetricsQueryParser, c)
+	params, filterQuery, err := parseParams(common.MetricsSummaryParams{}, MetricsQueryParser, c)
 	if err != nil {
 		return
 	}
 	ctx := c.Request.Context()
 
-	if fetchResponse, err := h.ChClient.FetchMetricsGraph(ctx, params, query); err != nil {
+	if fetchResponse, err := h.ChClient.FetchMetricsGraph(ctx, params, filterQuery); err != nil {
 		log.Print(err)
 		c.Status(http.StatusNoContent)
 		return
@@ -271,13 +270,13 @@ func (h Handlers) GetMetricsGraph(c *gin.Context) {
 }
 
 func (h Handlers) GetMetricsCpuTrends(c *gin.Context) {
-	params, query, err := parseParams(common.MetricsCpuTrendParams{}, MetricsQueryParser, c)
+	params, filterQuery, err := parseParams(common.MetricsCpuTrendParams{}, MetricsQueryParser, c)
 	if err != nil {
 		return
 	}
 	ctx := c.Request.Context()
 
-	if fetchResponse, err := h.ChClient.FetchMetricsCpuTrend(ctx, params, query); err != nil {
+	if fetchResponse, err := h.ChClient.FetchMetricsCpuTrend(ctx, params, filterQuery); err != nil {
 		log.Print(err)
 		c.Status(http.StatusNoContent)
 		return
@@ -291,13 +290,12 @@ func (h Handlers) GetMetricsCpuTrends(c *gin.Context) {
 }
 
 func (h Handlers) GetLastHTML(c *gin.Context) {
-	params, query, err := parseParams(common.MetricsLastHTMLParams{}, MetricsQueryParser, c)
+	params, filterQuery, err := parseParams(common.MetricsLastHTMLParams{}, MetricsQueryParser, c)
 	if err != nil {
 		return
 	}
-	fmt.Println(params, query)
 	ctx := c.Request.Context()
-	htmlPath, err := h.ChClient.FetchLastHTML(ctx, params, query)
+	htmlPath, err := h.ChClient.FetchLastHTML(ctx, params, filterQuery)
 	if err != nil {
 		return
 	}
