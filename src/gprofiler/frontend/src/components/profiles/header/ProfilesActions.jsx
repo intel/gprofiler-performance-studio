@@ -41,7 +41,7 @@ const DownloadLink = ({ serviceName, timeSelection, activeFilters, fileType, dow
 
     return (
         <a
-            href={`${DATA_URLS.DOWNLOAD_FLAMEGRAPH}${fileType}/?${queryString.stringify({
+            href={`${DATA_URLS.DOWNLOAD_FLAMEGRAPH}${fileType}?${queryString.stringify({
                 serviceName,
                 ...timeParams,
                 filter: JSON.stringify(activeFilters),
