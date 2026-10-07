@@ -93,12 +93,15 @@ services=("gprofiler-ps-ch-rest-service" $CLICKHOUSE_HOST)
 
 for i in "${services[@]}"
 do
-	set -- $i
-	docker exec $1 ping $2 -c2 > /dev/null
-	if [ $? -eq 0 ]
-	then
-	  echo -e "[${GREEN}OK${NC}] container $2 reachable from $1"
-	else
-	  echo -e "[${RED}ERROR${NC}] container $2 unreachable from $1"
-	fi
+        #set -- $i
+        set -- ${services[@]}
+        echo $1 $2
+        echo "TEST: docker exec $1 ping $2 -c2"
+        docker exec $1 ping $2 -c2 > /dev/null
+        if [ $? -eq 0 ]
+        then
+          echo -e "[${GREEN}OK${NC}] container $2 reachable from $1"
+        else
+          echo -e "[${RED}ERROR${NC}] container $2 unreachable from $1"
+        fi
 done
