@@ -37,8 +37,8 @@ def get_svg_file(collapsed_file_data: str):
     _, temp_collapsed_file = tempfile.mkstemp()
     with open(temp_collapsed_file, "w") as file:
         file.write(collapsed_file_data)
-    cmd = [f"{FLAMEGRAPH_PATH}/flamegraph.pl --inverted --colors=combined", temp_collapsed_file]
-    output = subprocess.check_output(f"{' '.join(cmd)}", shell=True)
+    cmd = [f"{FLAMEGRAPH_PATH}/flamegraph.pl", "--inverted", "--colors=combined", temp_collapsed_file]
+    output = subprocess.check_output(cmd)
     return BytesIO(output)
 
 
