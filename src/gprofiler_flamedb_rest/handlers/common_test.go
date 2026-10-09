@@ -17,15 +17,20 @@
 package handlers
 
 import (
-	"github.com/a8m/rql"
+	"database/sql"
+	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/a8m/rql"
 )
 
 func TestBuildQuery(t *testing.T) {
 	tests := []struct {
-		arg    string
-		output string
-		parser *rql.Parser
+		arg        string
+		output     string
+		outputArgs []any
+		parser     *rql.Parser
 	}{
 		{
 			arg: `
@@ -41,8 +46,14 @@ func TestBuildQuery(t *testing.T) {
 				}
 			`,
 			parser: QueryParser,
-			output: "AND ContainerEnvName <> 'order-router-ar' AND (HostName = 'i-052b60b314570ca6c' " +
-				"OR HostName = 'i-0dc8c3917b36b7bcb' OR HostName = 'i-000a551704de2f0ab')",
+			output: "AND ContainerEnvName <> @filter_0 AND (HostName = @filter_1 " +
+				"OR HostName = @filter_2 OR HostName = @filter_3)",
+			outputArgs: []any{
+				sql.Named("filter_0", "order-router-ar"),
+				sql.Named("filter_1", "i-052b60b314570ca6c"),
+				sql.Named("filter_2", "i-0dc8c3917b36b7bcb"),
+				sql.Named("filter_3", "i-000a551704de2f0ab"),
+			},
 		},
 		{
 			arg:    "{}",
@@ -53,10 +64,31 @@ func TestBuildQuery(t *testing.T) {
 	for _, test := range tests {
 		query, err := buildQuery(test.parser, []byte(test.arg))
 		if err != nil {
-			t.Errorf(err.Error())
+			t.Error(err)
 		}
-		if query != test.output {
-			t.Errorf("%v != %v", query, test.output)
+		if query.Clause != test.output {
+			t.Errorf("%v != %v", query.Clause, test.output)
 		}
+		if !reflect.DeepEqual(query.Args, test.outputArgs) {
+			t.Errorf("%v != %v", query.Args, test.outputArgs)
+		}
+	}
+}
+
+func TestBuildQueryKeepsInjectionPayloadInParameter(t *testing.T) {
+	payload := "x')) UNION ALL SELECT name FROM system.tables--"
+	rawFilter := []byte(`{"filter":{"InstanceType":"` + payload + `"}}`)
+
+	query, err := buildQuery(QueryParser, rawFilter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(query.Clause, payload) || strings.Contains(query.Clause, "UNION ALL") {
+		t.Fatalf("injection payload was embedded in SQL: %s", query.Clause)
+	}
+
+	expectedArgs := []any{sql.Named("filter_0", payload)}
+	if !reflect.DeepEqual(query.Args, expectedArgs) {
+		t.Fatalf("payload was not preserved as a query parameter: %v", query.Args)
 	}
 }

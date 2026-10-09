@@ -17,15 +17,18 @@
 package handlers
 
 import (
+	"database/sql"
 	"fmt"
-	"github.com/a8m/rql"
-	"github.com/gin-gonic/gin"
-	"log"
 	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/a8m/rql"
+	"github.com/gin-gonic/gin"
+
+	"restflamedb/common"
 )
 
 func StartTime() gin.HandlerFunc {
@@ -35,12 +38,12 @@ func StartTime() gin.HandlerFunc {
 	}
 }
 
-func parseParams[T any](params T, parser *rql.Parser, c *gin.Context) (T, string, error) {
-	var query string
+func parseParams[T any](params T, parser *rql.Parser, c *gin.Context) (T, common.QueryFilter, error) {
+	var filterQuery common.QueryFilter
 	var err error
 	if err = c.ShouldBindQuery(&params); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return params, query, err
+		return params, filterQuery, err
 	}
 
 	metaValue := reflect.ValueOf(&params).Elem()
@@ -48,10 +51,10 @@ func parseParams[T any](params T, parser *rql.Parser, c *gin.Context) (T, string
 	if filter.IsValid() {
 		rawFilterData := []byte(filter.String())
 		if len(rawFilterData) > 0 && parser != nil { // filter parameter was passed
-			query, err = buildQuery(parser, rawFilterData)
+			filterQuery, err = buildQuery(parser, rawFilterData)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return params, query, err
+				return params, filterQuery, err
 			}
 		}
 	}
@@ -61,39 +64,34 @@ func parseParams[T any](params T, parser *rql.Parser, c *gin.Context) (T, string
 		fn.Call(nil)
 	}
 
-	return params, query, nil
+	return params, filterQuery, nil
 }
 
-func buildQuery(parser *rql.Parser, rawFilterData []byte) (string, error) {
-	var query string
-	var expressions []string
-	var args []interface{}
+func buildQuery(parser *rql.Parser, rawFilterData []byte) (common.QueryFilter, error) {
+	var query common.QueryFilter
 	filters, err := parser.Parse(rawFilterData)
 	if err != nil {
-		return "", err
+		return query, err
 	}
-	if filters != nil {
-		expressions = strings.Split(filters.FilterExp, "?")
-		args = filters.FilterArgs
+	if filters == nil || filters.FilterExp == "" {
+		return query, nil
 	}
-	for idx, expr := range expressions {
-		v := ""
-		if idx < len(args) {
-			switch args[idx].(type) {
-			case int:
-				v = strconv.Itoa(args[idx].(int))
-			case string:
-				v = fmt.Sprintf(`'%s'`, args[idx].(string))
-			default:
-				log.Printf("Error: unable to cast and handle arg %v", args[idx])
-				continue
-			}
+
+	expressions := strings.Split(filters.FilterExp, "?")
+	if len(expressions) != len(filters.FilterArgs)+1 {
+		return query, fmt.Errorf("filter placeholder count does not match argument count")
+	}
+
+	var clause strings.Builder
+	clause.WriteString("AND ")
+	for idx, expression := range expressions {
+		clause.WriteString(expression)
+		if idx < len(filters.FilterArgs) {
+			name := "filter_" + strconv.Itoa(idx)
+			clause.WriteString("@" + name)
+			query.Args = append(query.Args, sql.Named(name, filters.FilterArgs[idx]))
 		}
-		query += fmt.Sprintf("%s%s", expr, v)
 	}
-	// if query is nonempty add prefix AND for using inside SQL query after time range block
-	if len(query) > 0 {
-		query = "AND " + query
-	}
+	query.Clause = clause.String()
 	return query, nil
 }
