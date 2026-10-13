@@ -41,6 +41,11 @@ type AllFiltersParams struct {
 	K8SObject     []string `form:"k8s_obj"`
 }
 
+type QueryFilter struct {
+	Clause string
+	Args   []any
+}
+
 type FiltersParams struct {
 	ContainerName string `rql:"column=ContainerName,filter"`
 	HostName      string `rql:"column=HostName,filter"`
