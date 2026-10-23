@@ -147,3 +147,11 @@ func TestDataIngestionHTML(t *testing.T) {
 		t.Fatalf("HTMLPath expected to be non empty")
 	}
 }
+
+func TestDbColumnsMatchAttributes(t *testing.T) {
+	for _, r := range []RecordsAttributesUnpack{StackRecord{}, MetricRecord{}} {
+		if c, a := len(r.getDbColumns()), len(r.getDbAttributes()); c != a {
+			t.Errorf("%T: %d columns but %d attributes", r, c, a)
+		}
+	}
+}

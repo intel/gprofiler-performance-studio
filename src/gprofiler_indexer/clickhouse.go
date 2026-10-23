@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -52,7 +53,39 @@ type MetricRecord struct {
 }
 
 type RecordsAttributesUnpack interface {
+	getDbColumns() []string
 	getDbAttributes() []interface{}
+}
+
+// Must match the order of getDbAttributes.
+func (mr MetricRecord) getDbColumns() []string {
+	return []string{
+		"Timestamp",
+		"ServiceId",
+		"InstanceType",
+		"HostName",
+		"CPUAverageUsedPercent",
+		"MemoryAverageUsedPercent",
+		"HTMLPath",
+	}
+}
+
+// Must match the order of getDbAttributes.
+func (sr StackRecord) getDbColumns() []string {
+	return []string{
+		"Timestamp",
+		"ServiceId",
+		"InstanceType",
+		"ContainerEnvName",
+		"HostName",
+		"ContainerName",
+		"NumSamples",
+		"CallStackHash",
+		"CallStackName",
+		"CallStackParent",
+		"InsertionTimestamp",
+		"ErrNumSamples",
+	}
 }
 
 func (mr MetricRecord) getDbAttributes() []interface{} {
@@ -144,7 +177,8 @@ func (c *ClickHouseClient) clickHouseWrite(records []RecordsAttributesUnpack, ta
 		return
 	}
 	ctx := context.Background()
-	batch, err := c.conn.PrepareBatch(ctx, fmt.Sprintf("INSERT INTO %s", tableName))
+	columns := strings.Join(records[0].getDbColumns(), ", ")
+	batch, err := c.conn.PrepareBatch(ctx, fmt.Sprintf("INSERT INTO %s (%s)", tableName, columns))
 	if err != nil {
 		logger.Errorf("unable to prepare batch: %v", err)
 		return
