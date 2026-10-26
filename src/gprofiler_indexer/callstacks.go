@@ -65,10 +65,21 @@ type FileInfo struct {
 	HTMLBlob       string `json:"htmlblob"`
 	FlamegraphHTML string `json:"flamegraph_html"`
 	Metrics        struct {
-		CPUAvg    float64 `json:"cpu_avg"`
-		MemoryAvg float64 `json:"mem_avg"`
+		CPUAvg    *float64 `json:"cpu_avg"`
+		MemoryAvg *float64 `json:"mem_avg"`
 	} `json:"metrics"`
 	ApplicationMetadataEnabled bool `json:"application_metadata_enabled"`
+}
+
+func valueOrZero(v *float64) float64 {
+	if v == nil {
+		return 0
+	}
+	return *v
+}
+
+func shouldWriteMetrics(fileInfo FileInfo, htmlBlobPath string) bool {
+	return htmlBlobPath != "" || (fileInfo.Metrics.CPUAvg != nil && fileInfo.Metrics.MemoryAvg != nil)
 }
 
 func isSwapper(stack []string) bool {
@@ -232,7 +243,7 @@ func (pw *ProfilesWriter) writeMetrics(serviceId uint32, instanceType string,
 		MemoryAverageUsedPercent: memoryAverageUsedPercent,
 		HTMLPath:                 path,
 	}
-	log.Debugf("DEBUG: Sending metric record to channel - ServiceId=%d, HostName=%s, HTMLPath=%s", 
+	log.Debugf("DEBUG: Sending metric record to channel - ServiceId=%d, HostName=%s, HTMLPath=%s",
 		serviceId, hostname, path)
 	pw.metricsRecords <- metricRecord
 	log.Debugf("DEBUG: Metric record sent to channel successfully")
@@ -378,14 +389,15 @@ func (pw *ProfilesWriter) ParseStackFrameFile(sess *session.Session, task SQSMes
 		}
 	}
 
+	cpuAvg := valueOrZero(fileInfo.Metrics.CPUAvg)
+	memAvg := valueOrZero(fileInfo.Metrics.MemoryAvg)
 	log.Debugf("DEBUG: hostname=%s, htmlBlobPath='%s', CPUAvg=%f, MemoryAvg=%f",
-		fileInfo.Metadata.Hostname, htmlBlobPath, fileInfo.Metrics.CPUAvg, fileInfo.Metrics.MemoryAvg)
+		fileInfo.Metadata.Hostname, htmlBlobPath, cpuAvg, memAvg)
 
-	if htmlBlobPath != "" || (fileInfo.Metrics.CPUAvg != 0 && fileInfo.Metrics.MemoryAvg != 0) {
+	if shouldWriteMetrics(fileInfo, htmlBlobPath) {
 		log.Debugf("DEBUG: Writing metrics for hostname=%s", fileInfo.Metadata.Hostname)
 		pw.writeMetrics(uint32(serviceId), fileInfo.Metadata.CloudInfo.InstanceType,
-			fileInfo.Metadata.Hostname, timestamp, fileInfo.Metrics.CPUAvg,
-			fileInfo.Metrics.MemoryAvg, htmlBlobPath)
+			fileInfo.Metadata.Hostname, timestamp, cpuAvg, memAvg, htmlBlobPath)
 	} else {
 		log.Debugf("DEBUG: SKIPPING metrics write for hostname=%s - condition failed", fileInfo.Metadata.Hostname)
 	}
