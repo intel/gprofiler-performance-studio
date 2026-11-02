@@ -216,7 +216,27 @@ You should see the following containers with the prefix 'gprofiler-ps*':
 Now You can access the UI by navigating to https://localhost:4433 in your browser
 (4433 is the default port, configurable in the docker-compose.yml file).
 
-## 3. Destroying the stack
+## 3. Upgrading an existing installation
+The database schema is created only on first start, when the volume is empty.
+When an upgrade changes the schema, apply the listed migrations by hand after
+pulling the new version and before restarting the services. Each file's header
+gives the exact command and how to roll it back. All `.up.sql` migrations are
+safe to re-run.
+
+Migration files are in `src/gprofiler_indexer/sql/migrations/`
+(ClickHouse) and `scripts/setup/postgres/migrations/` (PostgreSQL).
+
+| Release | Database | Single-node | Cluster mode |
+|---|---|---|---|
+| next | ClickHouse | `add_metrics_ttl.up.sql` | — (see note) |
+
+**Clusters created before commit `cb85c25` (#92)** don't have TTLs on any table.
+
+To add the default retention, apply the `ALTER TABLE ... ON CLUSTER ... MODIFY TTL`
+statements at the end of `create_ch_schema_cluster_mode.sql` by hand. Applying them
+deletes data older than each table's retention (as short as 7 days for `samples_local`).
+
+## 4. Destroying the stack
 ```shell
 docker-compose --profile with-clickhouse down -v
 ```

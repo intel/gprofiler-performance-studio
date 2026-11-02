@@ -246,3 +246,6 @@ ALTER TABLE flamedb.samples_1day_all
 
 ALTER TABLE flamedb.samples_1day
    MODIFY TTL "Timestamp" + INTERVAL 365 DAY;
+
+ALTER TABLE flamedb.metrics
+    MODIFY TTL "Timestamp" + INTERVAL 90 DAY;
