@@ -71,6 +71,26 @@ CREATE TABLE IF NOT EXISTS
     ENGINE = Distributed('{cluster}', flamedb, metrics_local, ServiceId);
 
 
+-- create raw table for additional metrics local (one row per metric name per snapshot)
+CREATE TABLE IF NOT EXISTS flamedb.metrics_ext_local ON CLUSTER '{cluster}'
+(
+    Timestamp    DateTime CODEC (DoubleDelta),
+    ServiceId    UInt32,
+    InstanceType LowCardinality(String),
+    HostName     LowCardinality(String),
+    HostNameHash UInt32 MATERIALIZED xxHash32(HostName),
+    Name         LowCardinality(String),
+    Value        Float32
+    ) engine = ReplicatedMergeTree('/clickhouse/{installation}/{cluster}/tables/{shard}/{database}/{table}',
+                                   '{replica}') PARTITION BY toYYYYMMDD(Timestamp)
+    ORDER BY (ServiceId, Name, HostNameHash, Timestamp);
+
+CREATE TABLE IF NOT EXISTS
+    flamedb.metrics_ext
+    ON CLUSTER '{cluster}' AS
+    flamedb.metrics_ext_local
+    ENGINE = Distributed('{cluster}', flamedb, metrics_ext_local, ServiceId);
+
 
 -- 1) create 1hour aggregated table all hostnames and all containers
 CREATE TABLE IF NOT EXISTS flamedb.samples_1hour_all_local_store ON CLUSTER '{cluster}' (
@@ -276,26 +296,27 @@ CREATE TABLE IF NOT EXISTS
     ENGINE = Distributed('{cluster}', flamedb, samples_1min_local);
 
 -- Raw data: High volume, short retention
-ALTER TABLE flamedb.samples_local ON CLUSTER '{cluster}' 
+ALTER TABLE flamedb.samples_local ON CLUSTER '{cluster}'
 MODIFY TTL Timestamp + INTERVAL 7 DAY;
 
 -- 1-minute aggregation: Medium volume, medium retention
-ALTER TABLE flamedb.samples_1min_local ON CLUSTER '{cluster}' 
+ALTER TABLE flamedb.samples_1min_local ON CLUSTER '{cluster}'
 MODIFY TTL Timestamp + INTERVAL 30 DAY;
 
 -- 1-hour aggregations: Lower volume, longer retention
-ALTER TABLE flamedb.samples_1hour_local_store ON CLUSTER '{cluster}' 
+ALTER TABLE flamedb.samples_1hour_local_store ON CLUSTER '{cluster}'
 MODIFY TTL Timestamp + INTERVAL 90 DAY;
-ALTER TABLE flamedb.samples_1hour_all_local_store ON CLUSTER '{cluster}' 
+ALTER TABLE flamedb.samples_1hour_all_local_store ON CLUSTER '{cluster}'
 MODIFY TTL Timestamp + INTERVAL 90 DAY;
 
 -- 1-day aggregations: Lowest volume, longest retention
-ALTER TABLE flamedb.samples_1day_local_store ON CLUSTER '{cluster}' 
+ALTER TABLE flamedb.samples_1day_local_store ON CLUSTER '{cluster}'
 MODIFY TTL Timestamp + INTERVAL 365 DAY;
-ALTER TABLE flamedb.samples_1day_all_local_store ON CLUSTER '{cluster}' 
+ALTER TABLE flamedb.samples_1day_all_local_store ON CLUSTER '{cluster}'
 MODIFY TTL Timestamp + INTERVAL 365 DAY;
 
 -- Metrics: Resource usage trends
-ALTER TABLE flamedb.metrics_local ON CLUSTER '{cluster}' 
+ALTER TABLE flamedb.metrics_local ON CLUSTER '{cluster}'
 MODIFY TTL Timestamp + INTERVAL 90 DAY;
-
+ALTER TABLE flamedb.metrics_ext_local ON CLUSTER '{cluster}'
+MODIFY TTL Timestamp + INTERVAL 90 DAY;

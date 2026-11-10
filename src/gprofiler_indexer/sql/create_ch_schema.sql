@@ -53,6 +53,18 @@ CREATE TABLE IF NOT EXISTS flamedb.metrics
 ) engine = MergeTree() PARTITION BY toYYYYMMDD(Timestamp)
       ORDER BY (ServiceId, InstanceType, HostNameHash, Timestamp);
 
+-- create raw table for additional metrics (one row per metric name per snapshot)
+CREATE TABLE IF NOT EXISTS flamedb.metrics_ext
+(
+    Timestamp    DateTime('UTC') CODEC (DoubleDelta),
+    ServiceId    UInt32,
+    InstanceType LowCardinality(String),
+    HostName     LowCardinality(String),
+    HostNameHash UInt32 MATERIALIZED xxHash32(HostName),
+    Name         LowCardinality(String),
+    Value        Float32
+) engine = MergeTree() PARTITION BY toYYYYMMDD(Timestamp)
+      ORDER BY (ServiceId, Name, HostNameHash, Timestamp);
 
 -- create 60min aggregated table all hostnames and all containers
 CREATE TABLE IF NOT EXISTS flamedb.samples_1hour_all
@@ -248,4 +260,7 @@ ALTER TABLE flamedb.samples_1day
    MODIFY TTL "Timestamp" + INTERVAL 365 DAY;
 
 ALTER TABLE flamedb.metrics
+    MODIFY TTL "Timestamp" + INTERVAL 90 DAY;
+
+ALTER TABLE flamedb.metrics_ext
     MODIFY TTL "Timestamp" + INTERVAL 90 DAY;

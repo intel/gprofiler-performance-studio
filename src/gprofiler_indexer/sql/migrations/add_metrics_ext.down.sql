@@ -1,0 +1,35 @@
+--
+-- Copyright (C) 2026 Intel Corporation
+--
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--    http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+--
+
+-- ============================================================
+-- ROLLBACK MIGRATION: Drop flamedb.metrics_ext (single-node)
+-- ============================================================
+-- WARNING: this deletes all stored additional metrics (such as PSI).
+-- The indexer keeps working without the table, but drops new
+-- additional metrics until the table is re-created.
+--
+-- Safe to run more than once.
+--
+-- Usage (from the deploy/ directory):
+--   docker exec -i gprofiler-ps-clickhouse bash -c \
+--     'clickhouse-client -u "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" -mn' \
+--     < ../src/gprofiler_indexer/sql/migrations/add_metrics_ext.down.sql
+--
+-- Re-apply:
+--   same command with add_metrics_ext.up.sql (the deleted data is not restored)
+-- ============================================================
+
+DROP TABLE IF EXISTS flamedb.metrics_ext;

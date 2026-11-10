@@ -60,6 +60,16 @@ Each data type follows a consistent 3-layer pattern:
   - `CPUAverageUsedPercent`, `MemoryAverageUsedPercent`: Resource usage
   - `HostName`, `InstanceType`: Host information
 
+#### `flamedb.metrics_ext` (Distributed) →  `flamedb.metrics_ext_local` (Physical)
+- **Purpose**: Stores additional per-host metrics, such as pressure stall information (PSI), one row per metric per profile
+- **Sharding Key**: `ServiceId`
+- **Retention**: 90 days (recommended)
+- **Columns**: 
+    - `Name`: Metric name, such as `psi.cpu.some`
+    - `Value`: Metric value (`Float32`)
+    - `HostName`, `InstanceType`: Host information
+- **Missing values**: A metric that a host didn't collect does not have a row (not stored as a 0)
+
 ### Aggregated Data (Materialized Views)
 
 The schema creates multiple aggregation levels to optimize query performance:
@@ -308,6 +318,8 @@ MODIFY TTL Timestamp + INTERVAL 365 DAY;
 -- Metrics: Resource usage trends
 ALTER TABLE flamedb.metrics_local ON CLUSTER '{cluster}' 
 MODIFY TTL Timestamp + INTERVAL 90 DAY;
+ALTER TABLE flamedb.metrics_ext_local ON CLUSTER '{cluster}' 
+MODIFY TTL Timestamp + INTERVAL 90 DAY;
 
 -- Optional: Add TTL for deletion of old partitions (more aggressive cleanup)
 -- This will delete entire partitions when they expire, which is more efficient
@@ -339,6 +351,7 @@ ENGINE = ReplicatedMergeTree(
 Data distribution across cluster nodes:
 - **samples**: Sharded by `CallStackHash` (evenly distributes stack traces)
 - **metrics**: Sharded by `ServiceId` (groups service metrics together)
+- **metrics_ext**: Sharded by `ServiceId` (same as metrics)
 
 ### Partitioning
 All tables are partitioned by date (`toYYYYMMDD(Timestamp)`) for:

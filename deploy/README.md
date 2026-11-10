@@ -228,7 +228,7 @@ Migration files are in `src/gprofiler_indexer/sql/migrations/`
 
 | Release | Database | Single-node | Cluster mode |
 |---|---|---|---|
-| next | ClickHouse | `add_metrics_ttl.up.sql` | — (see note) |
+| next | ClickHouse | `add_metrics_ttl.up.sql`, `add_metrics_ext.up.sql` | `add_metrics_ext_cluster.up.sql` (and see note) |
 
 **Clusters created before commit `cb85c25` (#92)** don't have TTLs on any table.
 
