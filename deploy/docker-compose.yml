@@ -166,6 +166,7 @@ services:
       - CONCURRENCY=8
       - CLICKHOUSE_STACKS_TABLE=flamedb.samples
       - CLICKHOUSE_METRICS_TABLE=flamedb.metrics
+      - CLICKHOUSE_METRICS_EXT_TABLE=flamedb.metrics_ext
       - CLICKHOUSE_STACKS_BATCH_SIZE=100000
       - CLICKHOUSE_METRICS_BATCH_SIZE=1000
       - CACHE_SIZE=2048

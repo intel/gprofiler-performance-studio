@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -52,6 +53,15 @@ type MetricRecord struct {
 	HTMLPath                 string
 }
 
+type MetricExtRecord struct {
+	Timestamp    time.Time
+	ServiceId    uint32
+	InstanceType string
+	HostName     string
+	Name         string
+	Value        float32
+}
+
 type RecordsAttributesUnpack interface {
 	getDbColumns() []string
 	getDbAttributes() []interface{}
@@ -67,6 +77,19 @@ func (mr MetricRecord) getDbColumns() []string {
 		"CPUAverageUsedPercent",
 		"MemoryAverageUsedPercent",
 		"HTMLPath",
+	}
+}
+
+// Must match the order of getDbAttributes. HostNameHash is MATERIALIZED, so it
+// is computed by ClickHouse and must not be inserted.
+func (mer MetricExtRecord) getDbColumns() []string {
+	return []string{
+		"Timestamp",
+		"ServiceId",
+		"InstanceType",
+		"HostName",
+		"Name",
+		"Value",
 	}
 }
 
@@ -97,6 +120,18 @@ func (mr MetricRecord) getDbAttributes() []interface{} {
 		mr.CPUAverageUsedPercent,
 		mr.MemoryAverageUsedPercent,
 		mr.HTMLPath,
+	}
+	return dbAttributes
+}
+
+func (mer MetricExtRecord) getDbAttributes() []interface{} {
+	dbAttributes := []interface{}{
+		mer.Timestamp,
+		mer.ServiceId,
+		mer.InstanceType,
+		mer.HostName,
+		mer.Name,
+		mer.Value,
 	}
 	return dbAttributes
 }
@@ -172,16 +207,15 @@ func NewClickHouseClient(settings *ClickHouseSettings) (*ClickHouseClient, error
 	}, nil
 }
 
-func (c *ClickHouseClient) clickHouseWrite(records []RecordsAttributesUnpack, tableName string) {
+func (c *ClickHouseClient) clickHouseInsert(records []RecordsAttributesUnpack, tableName string) error {
 	if len(records) == 0 {
-		return
+		return nil
 	}
 	ctx := context.Background()
 	columns := strings.Join(records[0].getDbColumns(), ", ")
 	batch, err := c.conn.PrepareBatch(ctx, fmt.Sprintf("INSERT INTO %s (%s)", tableName, columns))
 	if err != nil {
-		logger.Errorf("unable to prepare batch: %v", err)
-		return
+		return fmt.Errorf("unable to prepare batch: %w", err)
 	}
 
 	for _, temp := range records {
@@ -190,9 +224,31 @@ func (c *ClickHouseClient) clickHouseWrite(records []RecordsAttributesUnpack, ta
 		}
 	}
 	if err = batch.Send(); err != nil {
-		logger.Errorf("unable to send batch: %v", err)
+		return fmt.Errorf("unable to send batch: %w", err)
 	} else {
 		logger.Debugf("successfully sent %d records to %s", len(records), tableName)
+	}
+
+	return nil
+}
+
+func (c *ClickHouseClient) clickHouseWrite(records []RecordsAttributesUnpack, tableName string) {
+	if err := c.clickHouseInsert(records, tableName); err != nil {
+		logger.Error(err)
+	}
+}
+
+// metrics_ext comes from a manual migration (add_metrics_ext), so it may not
+// exist yet. Drop those batches with a rate-limited warning rather than an
+// error per batch. Inserts start working as soon as the table is created.
+func (c *ClickHouseClient) clickHouseWriteMetricsExt(records []RecordsAttributesUnpack, tableName string) {
+	err := c.clickHouseInsert(records, tableName)
+	var exception *clickhouse.Exception
+	if errors.As(err, &exception) && exception.Code == ClickHouseUnknownTable {
+		extTableMissingWarner.Warnf("table %s does not exist, dropped %d additional metrics rows; "+
+			"apply migration add_metrics_ext (see deploy/README.md)", tableName, len(records))
+	} else if err != nil {
+		logger.Error(err)
 	}
 }
 
@@ -213,8 +269,10 @@ func BufferedClickHouseWrite(args *CLIArgs, channels *RecordChannels, wg *sync.W
 	}
 	stacksTicker := time.NewTicker(time.Second * ClickHouseStacksFlushTimeout)
 	metricsTicker := time.NewTicker(time.Second * ClickHouseMetricsFlushTimeout)
+	metricsExtTicker := time.NewTicker(time.Second * ClickHouseMetricsFlushTimeout)
 	buffRecords := make([]RecordsAttributesUnpack, 0)
 	buffMetricsRecords := make([]RecordsAttributesUnpack, 0)
+	buffMetricsExtRecords := make([]RecordsAttributesUnpack, 0)
 
 	for {
 		select {
@@ -250,6 +308,22 @@ func BufferedClickHouseWrite(args *CLIArgs, channels *RecordChannels, wg *sync.W
 			clickhouseClient.clickHouseWrite(buffMetricsRecords, args.ClickHouseMetricsTable)
 			logger.Debugf("Flush %d metrics records to clickhouse on timeout %ds", len(buffMetricsRecords), ClickHouseMetricsFlushTimeout)
 			buffMetricsRecords = make([]RecordsAttributesUnpack, 0)
+		case metricExtRecord, ok := <-channels.MetricsExtRecords:
+			if ok {
+				buffMetricsExtRecords = append(buffMetricsExtRecords, metricExtRecord)
+				if len(buffMetricsExtRecords) >= args.ClickHouseMetricsExtBatchSize {
+					clickhouseClient.clickHouseWriteMetricsExt(buffMetricsExtRecords, args.ClickHouseMetricsExtTable)
+					logger.Debugf("Flush %d metrics_ext records to clickhouse", len(buffMetricsExtRecords))
+					buffMetricsExtRecords = make([]RecordsAttributesUnpack, 0)
+					metricsExtTicker.Reset(time.Second * ClickHouseMetricsFlushTimeout)
+				}
+			} else {
+				channels.MetricsExtRecords = nil
+			}
+		case <-metricsExtTicker.C:
+			clickhouseClient.clickHouseWriteMetricsExt(buffMetricsExtRecords, args.ClickHouseMetricsExtTable)
+			logger.Debugf("Flush %d metrics_ext records to clickhouse on timeout %ds", len(buffMetricsExtRecords), ClickHouseMetricsFlushTimeout)
+			buffMetricsExtRecords = make([]RecordsAttributesUnpack, 0)
 		}
 		if channels.StacksRecords == nil {
 			stacksTicker.Stop()
@@ -257,12 +331,16 @@ func BufferedClickHouseWrite(args *CLIArgs, channels *RecordChannels, wg *sync.W
 		if channels.MetricsRecords == nil {
 			metricsTicker.Stop()
 		}
-		if channels.StacksRecords == nil && channels.MetricsRecords == nil {
+		if channels.MetricsExtRecords == nil {
+			metricsExtTicker.Stop()
+		}
+		if channels.StacksRecords == nil && channels.MetricsRecords == nil && channels.MetricsExtRecords == nil {
 			break
 		}
 	}
 	// flush buffer on exit
 	clickhouseClient.clickHouseWrite(buffRecords, args.ClickHouseStacksTable)
 	clickhouseClient.clickHouseWrite(buffMetricsRecords, args.ClickHouseMetricsTable)
+	clickhouseClient.clickHouseWriteMetricsExt(buffMetricsExtRecords, args.ClickHouseMetricsExtTable)
 	logger.Debug("BufferedClickHouseWrite finished")
 }

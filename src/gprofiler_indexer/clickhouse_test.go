@@ -65,8 +65,9 @@ func ingestData(tb testing.TB, args *CLIArgs, filename string) {
 	var buffWriterWaitGroup sync.WaitGroup
 
 	channels := RecordChannels{
-		StacksRecords:  make(chan StackRecord, args.ClickHouseStacksBatchSize),
-		MetricsRecords: make(chan MetricRecord, args.ClickHouseMetricsBatchSize),
+		StacksRecords:     make(chan StackRecord, args.ClickHouseStacksBatchSize),
+		MetricsRecords:    make(chan MetricRecord, args.ClickHouseMetricsBatchSize),
+		MetricsExtRecords: make(chan MetricExtRecord, args.ClickHouseMetricsExtBatchSize),
 	}
 	stopChannel := make(chan bool, 1)
 	frameReplacer = NewFrameReplacer()
@@ -92,6 +93,7 @@ func ingestData(tb testing.TB, args *CLIArgs, filename string) {
 	tasksWaitGroup.Wait()
 	close(channels.StacksRecords)
 	close(channels.MetricsRecords)
+	close(channels.MetricsExtRecords)
 	buffWriterWaitGroup.Wait()
 }
 
@@ -149,7 +151,7 @@ func TestDataIngestionHTML(t *testing.T) {
 }
 
 func TestDbColumnsMatchAttributes(t *testing.T) {
-	for _, r := range []RecordsAttributesUnpack{StackRecord{}, MetricRecord{}} {
+	for _, r := range []RecordsAttributesUnpack{StackRecord{}, MetricRecord{}, MetricExtRecord{}} {
 		if c, a := len(r.getDbColumns()), len(r.getDbAttributes()); c != a {
 			t.Errorf("%T: %d columns but %d attributes", r, c, a)
 		}

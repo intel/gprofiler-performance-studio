@@ -16,12 +16,20 @@
 
 package main
 
+import (
+	"time"
+)
+
 const (
 	ClickHouseStacksFlushTimeout  = 30
 	ClickHouseMetricsFlushTimeout = 30
 	MaxS3FileSize                 = 25 * 1024 * 1024
 	ScannerBufSize                = 1024 * 1024
 	MaxScannerBufSize             = 25 * ScannerBufSize
+	MaxExtMetricsPerFile          = 64
+	MaxExtMetricNameLen           = 64
+	ExtMetricsWarnInterval        = 10 * time.Minute
+	ClickHouseUnknownTable        = 60 // ClickHouse error code UNKNOWN_TABLE
 	V1Prefix                      = "v1"
 	ConfPrefix                    = "conf/"
 	AppName                       = "gprofiler-indexer"

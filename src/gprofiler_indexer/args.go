@@ -21,21 +21,23 @@ import (
 )
 
 type CLIArgs struct {
-	SQSQueue                   string
-	S3Bucket                   string
-	ClickHouseAddr             string
-	ClickHouseUser             string
-	ClickHousePassword         string
-	ClickHouseUseTLS           bool
-	ClickHouseStacksTable      string
-	ClickHouseMetricsTable     string
-	Concurrency                int
-	ClickHouseStacksBatchSize  int
-	ClickHouseMetricsBatchSize int
-	InputFolder                string
-	FrameReplaceFileName       string
-	AWSEndpoint                string
-	AWSRegion                  string
+	SQSQueue                      string
+	S3Bucket                      string
+	ClickHouseAddr                string
+	ClickHouseUser                string
+	ClickHousePassword            string
+	ClickHouseUseTLS              bool
+	ClickHouseStacksTable         string
+	ClickHouseMetricsTable        string
+	ClickHouseMetricsExtTable     string
+	Concurrency                   int
+	ClickHouseStacksBatchSize     int
+	ClickHouseMetricsBatchSize    int
+	ClickHouseMetricsExtBatchSize int
+	InputFolder                   string
+	FrameReplaceFileName          string
+	AWSEndpoint                   string
+	AWSRegion                     string
 	// PostgreSQL Configuration
 	PostgresHost     string
 	PostgresPort     int
@@ -46,16 +48,18 @@ type CLIArgs struct {
 
 func NewCliArgs() *CLIArgs {
 	return &CLIArgs{
-		ClickHouseAddr:             "localhost:9000",
-		ClickHouseStacksTable:      "flamedb.samples",
-		ClickHouseMetricsTable:     "flamedb.metrics",
-		ClickHouseUser:             "default",
-		ClickHousePassword:         "",
-		ClickHouseUseTLS:           false,
-		Concurrency:                2,
-		ClickHouseStacksBatchSize:  10000,
-		ClickHouseMetricsBatchSize: 100,
-		FrameReplaceFileName:       ConfPrefix + "replace.yaml",
+		ClickHouseAddr:                "localhost:9000",
+		ClickHouseStacksTable:         "flamedb.samples",
+		ClickHouseMetricsTable:        "flamedb.metrics",
+		ClickHouseMetricsExtTable:     "flamedb.metrics_ext",
+		ClickHouseUser:                "default",
+		ClickHousePassword:            "",
+		ClickHouseUseTLS:              false,
+		Concurrency:                   2,
+		ClickHouseStacksBatchSize:     10000,
+		ClickHouseMetricsBatchSize:    100,
+		ClickHouseMetricsExtBatchSize: 300,
+		FrameReplaceFileName:          ConfPrefix + "replace.yaml",
 		// PostgreSQL defaults
 		PostgresHost:     "localhost",
 		PostgresPort:     5432,
@@ -92,6 +96,10 @@ func (ca *CLIArgs) ParseArgs() {
 	flag.IntVar(&ca.ClickHouseMetricsBatchSize, "clickhouse-metrics-batch-size",
 		LookupEnvOrInt("CLICKHOUSE_METRICS_BATCH_SIZE", ca.ClickHouseMetricsBatchSize),
 		"clickhouse metrics batch size (default 100)")
+	flag.StringVar(&ca.ClickHouseMetricsExtTable, "clickhouse-metrics-ext-table", LookupEnvOrString("CLICKHOUSE_METRICS_EXT_TABLE",
+		ca.ClickHouseMetricsExtTable), "ClickHouse additional metrics table (default metrics_ext)")
+	flag.IntVar(&ca.ClickHouseMetricsExtBatchSize, "clickhouse-metrics-ext-batch-size", LookupEnvOrInt("CLICKHOUSE_METRICS_EXT_BATCH_SIZE",
+		ca.ClickHouseMetricsExtBatchSize), "clickhouse additional metrics batch size (default 300)")
 	flag.StringVar(&ca.FrameReplaceFileName, "replace-file", LookupEnvOrString("REPLACE_FILE",
 		ca.FrameReplaceFileName),
 		"replace.yaml")

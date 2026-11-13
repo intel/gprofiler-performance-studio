@@ -32,8 +32,9 @@ var (
 )
 
 type RecordChannels struct {
-	StacksRecords  chan StackRecord
-	MetricsRecords chan MetricRecord
+	StacksRecords     chan StackRecord
+	MetricsRecords    chan MetricRecord
+	MetricsExtRecords chan MetricExtRecord
 }
 
 func InitLogs() {
@@ -66,8 +67,9 @@ func main() {
 
 	tasks := make(chan SQSMessage, args.Concurrency)
 	channels := RecordChannels{
-		StacksRecords:  make(chan StackRecord, args.ClickHouseStacksBatchSize),
-		MetricsRecords: make(chan MetricRecord, args.ClickHouseMetricsBatchSize),
+		StacksRecords:     make(chan StackRecord, args.ClickHouseStacksBatchSize),
+		MetricsRecords:    make(chan MetricRecord, args.ClickHouseMetricsBatchSize),
+		MetricsExtRecords: make(chan MetricExtRecord, args.ClickHouseMetricsExtBatchSize),
 	}
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	var tasksWaitGroup sync.WaitGroup
@@ -121,6 +123,7 @@ func main() {
 			tasksWaitGroup.Wait()
 			close(channels.StacksRecords)
 			close(channels.MetricsRecords)
+			close(channels.MetricsExtRecords)
 		}
 	}()
 

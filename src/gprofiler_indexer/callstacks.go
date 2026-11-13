@@ -21,6 +21,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,6 +36,12 @@ import (
 const (
 	ProfilingTypeAdhoc      = "adhoc"
 	ProfilingTypeContinuous = "continuous"
+)
+
+var (
+	extTooManyWarner      = newRateLimitedWarner(ExtMetricsWarnInterval)
+	extInvalidWarner      = newRateLimitedWarner(ExtMetricsWarnInterval)
+	extTableMissingWarner = newRateLimitedWarner(ExtMetricsWarnInterval)
 )
 
 type FrameValuesMap map[string]map[string]FrameValue
@@ -68,7 +76,8 @@ type FileInfo struct {
 		CPUAvg    *float64 `json:"cpu_avg"`
 		MemoryAvg *float64 `json:"mem_avg"`
 	} `json:"metrics"`
-	ApplicationMetadataEnabled bool `json:"application_metadata_enabled"`
+	ExtMetrics                 map[string]*float64 `json:"ext_metrics"`
+	ApplicationMetadataEnabled bool                `json:"application_metadata_enabled"`
 }
 
 func valueOrZero(v *float64) float64 {
@@ -80,6 +89,21 @@ func valueOrZero(v *float64) float64 {
 
 func shouldWriteMetrics(fileInfo FileInfo, htmlBlobPath string) bool {
 	return htmlBlobPath != "" || (fileInfo.Metrics.CPUAvg != nil && fileInfo.Metrics.MemoryAvg != nil)
+}
+
+// Rejects empty or long names, nulls, and values outside the Float32 range.
+func validExtMetrics(ext map[string]*float64) (map[string]float32, []string) {
+	valid := make(map[string]float32, len(ext))
+	var rejected []string
+	for name, v := range ext {
+		if v == nil || name == "" || len(name) > MaxExtMetricNameLen || math.Abs(*v) > math.MaxFloat32 {
+			rejected = append(rejected, name)
+			continue
+		}
+		valid[name] = float32(*v)
+	}
+	sort.Strings(rejected)
+	return valid, rejected
 }
 
 func isSwapper(stack []string) bool {
@@ -175,15 +199,17 @@ func processStack(stack []string, sampleCount int, rawContainerName string, fram
 }
 
 type ProfilesWriter struct {
-	chMutex        sync.Mutex
-	stacksRecords  chan StackRecord
-	metricsRecords chan MetricRecord
+	chMutex           sync.Mutex
+	stacksRecords     chan StackRecord
+	metricsRecords    chan MetricRecord
+	metricsExtRecords chan MetricExtRecord
 }
 
 func NewProfilesWriter(channels *RecordChannels) *ProfilesWriter {
 	return &ProfilesWriter{
-		stacksRecords:  channels.StacksRecords,
-		metricsRecords: channels.MetricsRecords,
+		stacksRecords:     channels.StacksRecords,
+		metricsRecords:    channels.MetricsRecords,
+		metricsExtRecords: channels.MetricsExtRecords,
 	}
 }
 
@@ -247,6 +273,21 @@ func (pw *ProfilesWriter) writeMetrics(serviceId uint32, instanceType string,
 		serviceId, hostname, path)
 	pw.metricsRecords <- metricRecord
 	log.Debugf("DEBUG: Metric record sent to channel successfully")
+}
+
+func (pw *ProfilesWriter) writeExtMetrics(serviceId uint32, instanceType string,
+	hostname string, timestamp time.Time, ext map[string]float32) {
+
+	for name, value := range ext {
+		pw.metricsExtRecords <- MetricExtRecord{
+			Timestamp:    timestamp,
+			ServiceId:    serviceId,
+			InstanceType: instanceType,
+			HostName:     hostname,
+			Name:         name,
+			Value:        value,
+		}
+	}
 }
 
 func (pw *ProfilesWriter) ParseStackFrameFile(sess *session.Session, task SQSMessage, s3bucket string,
@@ -400,6 +441,22 @@ func (pw *ProfilesWriter) ParseStackFrameFile(sess *session.Session, task SQSMes
 			fileInfo.Metadata.Hostname, timestamp, cpuAvg, memAvg, htmlBlobPath)
 	} else {
 		log.Debugf("DEBUG: SKIPPING metrics write for hostname=%s - condition failed", fileInfo.Metadata.Hostname)
+	}
+
+	extMetrics := fileInfo.ExtMetrics
+	if len(extMetrics) > MaxExtMetricsPerFile {
+
+		extTooManyWarner.Warnf("host %s sent %d ext_metrics entries, over the cap of %d; dropping all of them",
+			fileInfo.Metadata.Hostname, len(extMetrics), MaxExtMetricsPerFile)
+		extMetrics = nil
+	}
+	validExt, rejectedExt := validExtMetrics(extMetrics)
+	if len(rejectedExt) > 0 {
+		extInvalidWarner.Warnf("host %s: dropped invalid ext_metrics entries %q", fileInfo.Metadata.Hostname, rejectedExt)
+	}
+	if len(validExt) > 0 {
+		pw.writeExtMetrics(uint32(serviceId), fileInfo.Metadata.CloudInfo.InstanceType,
+			fileInfo.Metadata.Hostname, timestamp, validExt)
 	}
 
 	return nil
