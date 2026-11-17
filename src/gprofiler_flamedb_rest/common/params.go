@@ -120,6 +120,25 @@ type MetricsCpuTrendParams struct {
 	InstanceType          []string  `form:"instance_type"`
 }
 
+type MetricsExtNamesParams struct {
+	TimeParams
+	ServiceId    int      `form:"service" binding:"required"`
+	Filter       string   `form:"filter"`
+	HostName     []string `form:"hostname"`
+	InstanceType []string `form:"instance_type"`
+}
+
+type MetricsExtGraphParams struct {
+	TimeParams
+	ServiceId    int      `form:"service" binding:"required"`
+	Name         string   `form:"name" binding:"required,max=64"`
+	Filter       string   `form:"filter"`
+	Percentile   int      `form:"percentile,default=90" binding:"numeric,min=0,max=100"`
+	HostName     []string `form:"hostname"`
+	InstanceType []string `form:"instance_type"`
+	Interval     string   `form:"interval"`
+}
+
 type MetricsServicesListSummaryParams struct {
 	ServicesList []int `json:"services_ids"`
 	ClientsList  []int `json:"clients_ids"`
@@ -146,6 +165,13 @@ type MetricsSummary struct {
 	UniqHostnames    int        `json:"uniq_hostnames,omitempty"`
 	GroupedBy        *string    `json:"grouped_by,omitempty"`
 	Time             *time.Time `json:"time,omitempty"`
+}
+
+type MetricsExtPoint struct {
+	Time       time.Time `json:"time"`
+	Avg        float64   `json:"avg"`
+	Max        float64   `json:"max"`
+	Percentile float64   `json:"percentile"`
 }
 
 type MetricsCpuTrend struct {

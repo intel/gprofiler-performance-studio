@@ -7,3 +7,19 @@ GET http://localhost:8080/api/v1/flamegraph?
     service=647163&
     metadata=full&
     enrichment=lang
+
+### Additional metrics: names available for a service in the time range
+GET http://localhost:8080/api/v1/metrics/ext/names?
+    start_datetime=2026-11-14T00:00:00&
+    end_datetime=2026-11-17T00:00:00&
+    service=1
+
+### Additional metrics: one metric over time, aggregated across hosts (avg / max / percentile)
+GET http://localhost:8080/api/v1/metrics/ext/graph?
+    start_datetime=2026-11-14T00:00:00&
+    end_datetime=2026-11-17T00:00:00&
+    service=1&
+    name=psi.cpu.some&
+    percentile=90&
+    interval=1%20hour&
+    hostname=my-host

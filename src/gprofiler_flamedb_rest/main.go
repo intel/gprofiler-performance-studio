@@ -39,6 +39,9 @@ func main() {
 	flag.StringVar(&config.ClickHouseMetricsTable, "clickhouse-metrics-table",
 		common.LookupEnvOrDefault("CLICKHOUSE_METRICS_TABLE", config.ClickHouseMetricsTable),
 		"ClickHouse metrics table (default metrics)")
+	flag.StringVar(&config.ClickHouseMetricsExtTable, "clickhouse-metrics-ext-table",
+		common.LookupEnvOrDefault("CLICKHOUSE_METRICS_EXT_TABLE", config.ClickHouseMetricsExtTable),
+		"ClickHouse additional metrics table (default metrics_ext)")
 	flag.BoolVar(&config.UseTLS, "use-tls",
 		common.LookupEnvOrDefault("USE_TLS", config.UseTLS),
 		"Run server with TLS ('false' or '0' to disable), (default true)")
@@ -91,6 +94,8 @@ func main() {
 	router.GET("/api/v1/metrics/summary", h.GetMetricsSummary)
 	router.POST("/api/v1/metrics/services_list_summary", h.GetMetricsServicesListSummary)
 	router.GET("/api/v1/metrics/graph", h.GetMetricsGraph)
+	router.GET("/api/v1/metrics/ext/names", h.GetMetricsExtNames)
+	router.GET("/api/v1/metrics/ext/graph", h.GetMetricsExtGraph)
 	router.GET("/api/v1/metrics/cpu_trend", h.GetMetricsCpuTrends)
 	router.GET("/api/v1/metrics/lasthtml", h.GetLastHTML)
 	if config.UseTLS {

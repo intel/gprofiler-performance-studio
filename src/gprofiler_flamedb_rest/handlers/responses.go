@@ -89,6 +89,16 @@ type MetricsGraphResponse struct {
 	ExecTimeResponse
 }
 
+type MetricsExtNamesResponse struct {
+	Result []string `json:"result"`
+	ExecTimeResponse
+}
+
+type MetricsExtGraphResponse struct {
+	Result []common.MetricsExtPoint `json:"result"`
+	ExecTimeResponse
+}
+
 type MetricsCpuResponse struct {
 	Result common.MetricsCpuTrend `json:"result"`
 	ExecTimeResponse

@@ -983,6 +983,81 @@ func (c *ClickHouseClient) FetchMetricsGraph(ctx context.Context, params common.
 	return result, err
 }
 
+func (c *ClickHouseClient) FetchMetricsExtNames(ctx context.Context, params common.MetricsExtNamesParams,
+	filterQuery common.QueryFilter) ([]string, error) {
+	defaultEmptyList := make([]string, 0)
+	_, conditions := BuildConditions(defaultEmptyList, params.HostName, params.InstanceType, defaultEmptyList, filterQuery)
+
+	query := fmt.Sprintf(`
+        SELECT DISTINCT Name FROM %s
+        WHERE ServiceId = @service_id AND (Timestamp BETWEEN @start_time AND @end_time) %s
+        ORDER BY Name;
+    `, config.ClickHouseMetricsExtTable, conditions.Clause)
+	rows, err := c.client.QueryContext(ctx, query, withFilterArgs(conditions,
+		sql.Named("service_id", params.ServiceId),
+		sql.Named("start_time", params.StartDateTime),
+		sql.Named("end_time", params.EndDateTime),
+	)...)
+	if err != nil {
+		log.Printf("unable to execute query %v\n", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]string, 0)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		result = append(result, name)
+	}
+	return result, rows.Err()
+}
+
+func (c *ClickHouseClient) FetchMetricsExtGraph(ctx context.Context, params common.MetricsExtGraphParams,
+	filterQuery common.QueryFilter) ([]common.MetricsExtPoint, error) {
+	defaultEmptyList := make([]string, 0)
+	_, conditions := BuildConditions(defaultEmptyList, params.HostName, params.InstanceType, defaultEmptyList, filterQuery)
+	interval := getInterval(params.StartDateTime, params.EndDateTime, params.Interval)
+	percentile := float64(params.Percentile) / 100.0
+
+	// Inner: each host's average over the interval (equal-length snapshots, so this is the
+	// time-weighted mean). Outer: avg / max / pXX of those per-host values across hosts.
+	query := fmt.Sprintf(`
+        SELECT Datetime, avg(HostValue), max(HostValue), quantile(@percentile)(HostValue) FROM
+        (SELECT toStartOfInterval(Timestamp, INTERVAL @interval) AS Datetime,
+            HostNameHash,
+            avg(Value) AS HostValue
+        FROM %s
+        WHERE ServiceId = @service_id AND Name = @name AND (Timestamp BETWEEN @start_time AND @end_time) %s
+        GROUP BY Datetime, HostNameHash) GROUP BY Datetime ORDER BY Datetime DESC;
+    `, config.ClickHouseMetricsExtTable, conditions.Clause)
+	rows, err := c.client.QueryContext(ctx, query, withFilterArgs(conditions,
+		sql.Named("percentile", percentile),
+		sql.Named("interval", interval),
+		sql.Named("service_id", params.ServiceId),
+		sql.Named("name", params.Name),
+		sql.Named("start_time", params.StartDateTime),
+		sql.Named("end_time", params.EndDateTime),
+	)...)
+	if err != nil {
+		log.Printf("unable to execute query %v\n", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]common.MetricsExtPoint, 0)
+	for rows.Next() {
+		var p common.MetricsExtPoint
+		if err := rows.Scan(&p.Time, &p.Avg, &p.Max, &p.Percentile); err != nil {
+			return nil, err
+		}
+		result = append(result, p)
+	}
+	return result, rows.Err()
+}
+
 func (c *ClickHouseClient) FetchMetricsCpuTrend(ctx context.Context, params common.MetricsCpuTrendParams,
 	filterQuery common.QueryFilter) (common.MetricsCpuTrend, error) {
 	defaultEmptyList := make([]string, 0)

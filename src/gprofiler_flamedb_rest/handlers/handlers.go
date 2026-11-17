@@ -269,6 +269,46 @@ func (h Handlers) GetMetricsGraph(c *gin.Context) {
 	}
 }
 
+func (h Handlers) GetMetricsExtNames(c *gin.Context) {
+	params, filterQuery, err := parseParams(common.MetricsExtNamesParams{}, MetricsQueryParser, c)
+	if err != nil {
+		return
+	}
+	ctx := c.Request.Context()
+
+	if fetchResponse, err := h.ChClient.FetchMetricsExtNames(ctx, params, filterQuery); err != nil {
+		log.Print(err)
+		c.Status(http.StatusNoContent)
+		return
+	} else {
+		response := MetricsExtNamesResponse{
+			Result: fetchResponse,
+		}
+		response.SetExecTime(c.GetTime("requestStartTime"))
+		c.JSON(http.StatusOK, response)
+	}
+}
+
+func (h Handlers) GetMetricsExtGraph(c *gin.Context) {
+	params, filterQuery, err := parseParams(common.MetricsExtGraphParams{}, MetricsQueryParser, c)
+	if err != nil {
+		return
+	}
+	ctx := c.Request.Context()
+
+	if fetchResponse, err := h.ChClient.FetchMetricsExtGraph(ctx, params, filterQuery); err != nil {
+		log.Print(err)
+		c.Status(http.StatusNoContent)
+		return
+	} else {
+		response := MetricsExtGraphResponse{
+			Result: fetchResponse,
+		}
+		response.SetExecTime(c.GetTime("requestStartTime"))
+		c.JSON(http.StatusOK, response)
+	}
+}
+
 func (h Handlers) GetMetricsCpuTrends(c *gin.Context) {
 	params, filterQuery, err := parseParams(common.MetricsCpuTrendParams{}, MetricsQueryParser, c)
 	if err != nil {
