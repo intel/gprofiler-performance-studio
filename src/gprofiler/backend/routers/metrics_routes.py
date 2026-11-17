@@ -31,6 +31,7 @@ from backend.models.metrics_models import (
     HeartbeatResponse,
     HTMLMetadata,
     InstanceTypeCount,
+    MetricExtGraph,
     MetricGraph,
     MetricNodesAndCores,
     MetricNodesCoresSummary,
@@ -157,6 +158,30 @@ def get_flamegraph_metrics_graph(
         return Response(status_code=204)
     fg_params.filter = get_rql_only_for_one_key(fg_params.filter, FilterTypes.HOSTNAME_KEY)
     return get_metrics_response(fg_params, lookup_for="graph", interval=requested_interval)
+
+
+@router.get("/ext/names", response_model=List[str], responses={204: {"description": "Good request, just has no data"}})
+def get_metrics_ext_names(fg_params: FGParamsBaseModel = Depends(flamegraph_base_request_params)):
+    if get_rql_first_eq_key(fg_params.filter, FilterTypes.K8S_OBJ_KEY):
+        return Response(status_code=204)
+    fg_params.filter = get_rql_only_for_one_key(fg_params.filter, FilterTypes.HOSTNAME_KEY)
+    return get_metrics_response(fg_params, lookup_for="ext/names")
+
+
+@router.get(
+    "/ext/graph",
+    response_model=List[MetricExtGraph],
+    responses={204: {"description": "Good request, just has no data"}},
+)
+def get_metrics_ext_graph(
+    name: str = Query(..., max_length=64),
+    requested_interval: Optional[str] = "",
+    fg_params: FGParamsBaseModel = Depends(flamegraph_base_request_params),
+):
+    if get_rql_first_eq_key(fg_params.filter, FilterTypes.K8S_OBJ_KEY):
+        return Response(status_code=204)
+    fg_params.filter = get_rql_only_for_one_key(fg_params.filter, FilterTypes.HOSTNAME_KEY)
+    return get_metrics_response(fg_params, lookup_for="ext/graph", interval=requested_interval, name=name)
 
 
 @router.get(

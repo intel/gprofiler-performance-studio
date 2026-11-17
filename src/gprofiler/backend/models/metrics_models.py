@@ -72,6 +72,13 @@ class MetricGraph(Metric):
     time: datetime
 
 
+class MetricExtGraph(BaseModel):
+    time: datetime
+    avg: float
+    max: float
+    percentile: float
+
+
 class MetricNodesCoresSummary(BaseModel):
     avg_cores: float
     avg_nodes: Optional[float]

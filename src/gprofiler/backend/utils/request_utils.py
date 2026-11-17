@@ -169,6 +169,7 @@ def get_metrics_response(
     interval=None,
     compared_start_datetime=None,
     compared_end_datetime=None,
+    name=None,
 ) -> Union[List, Dict, str]:
     fg_filter = fg_params.filter.json().encode() if fg_params.filter else None
     db_api_params = get_api_params(
@@ -179,6 +180,7 @@ def get_metrics_response(
         filter=fg_filter,
         compared_start_datetime=compared_start_datetime,
         compared_end_datetime=compared_end_datetime,
+        name=name,
         lookup_for=lookup_for,
         interval=interval,
     )
