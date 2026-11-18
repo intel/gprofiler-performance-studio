@@ -21,15 +21,18 @@ import { Box } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import { memo, useCallback, useContext, useEffect, useState } from 'react';
 
+import { useGetServiceExtMetricGraph, useGetServiceExtMetricNames } from '@/api/hooks/useGetServiceExtMetrics';
 import useGetServiceMemoryAndCpu from '@/api/hooks/useGetServiceMemoryAndCpu';
 import useGetServiceNodesAndCores from '@/api/hooks/useGetServiceNodesAndCores';
 import useGetServiceSamples from '@/api/hooks/useGetServiceSamples';
 import Flexbox from '@/components/common/layout/Flexbox';
+import Select from '@/components/common/selectors/select/Select';
 import ResoultionDropDown from '@/components/profiles/views/service/ResolutionDropDown';
 import { SelectorsContext } from '@/states';
 
 import CoresGraph from './graphs/CoresGraph';
 import CpuGraph from './graphs/CpuGraph';
+import ExtMetricGraph from './graphs/ExtMetricGraph';
 import GraphSkeleton from './graphs/GraphSkeleton';
 import { useGetEdgesTimes } from './graphs/graphUtils';
 import MemoryGraph from './graphs/MemoryGraph';
@@ -48,6 +51,16 @@ const ServiceGraph = memo(() => {
     const { nodesAndCoresData, nodesAndCoresLoading } = useGetServiceNodesAndCores({
         resolution: resolutionValue,
     });
+
+    const { extNames, extNamesLoading } = useGetServiceExtMetricNames();
+    const [extName, setExtName] = useState(undefined);
+    // Fall back to the first name until one is picked, or when the pick isn't in the current range/filter.
+    const selectedExtName = extNames?.includes(extName) ? extName : extNames?.[0];
+    const { extGraphData, extGraphLoading } = useGetServiceExtMetricGraph({
+        resolution: resolutionValue,
+        name: selectedExtName,
+    });
+
     const { edges } = useGetEdgesTimes();
 
     const { setTimeSelection, selectedGraphTab, setSelectedGraphTab } = useContext(SelectorsContext);
@@ -70,22 +83,37 @@ const ServiceGraph = memo(() => {
         <Box sx={{ backgroundColor: 'fieldBlue.main', p: 8, pt: 6, borderRadius: 2, height: '340px' }}>
             <TabContext value={selectedGraphTab}>
                 <Flexbox column={false} justifyContent={'space-between'} alignItems={'flex-start'}>
-                    <Box sx={{ borderBottom: 1, borderColor: 'divider', width: '370px', mb: 8 }}>
+                    <Box sx={{ borderBottom: 1, borderColor: 'divider', width: '490px', mb: 8 }}>
                         <StyledTabs onChange={changeTab}>
                             <StyledTab label='CPU' value='1' />
                             <StyledTab label='MEMORY' value='2' />
                             <StyledTab label='SAMPLES' value='3' />
                             <StyledTab label='NODES' value='4' />
                             <StyledTab label='CORES' value='5' />
+                            <StyledTab label='ADDITIONAL' value='6' />
                         </StyledTabs>
                     </Box>
-                    <Flexbox alignItems={'center'} sx={{ width: '200px' }}>
-                        <Typography sx={{ mr: 2 }}>Resolution:</Typography>
-                        <ResoultionDropDown
-                            setResolutionValue={setResolutionValue}
-                            setResolution={setResolution}
-                            resolution={resolution}
-                        />
+                    <Flexbox alignItems={'center'}>
+                        {selectedGraphTab === '6' && extNames?.length > 0 && (
+                            <Flexbox alignItems={'center'} sx={{ width: '220px', mr: 6 }}>
+                                <Typography sx={{ mr: 2 }}>Metric:</Typography>
+                                <Select
+                                    fullWidth={true}
+                                    placeholder='Metric'
+                                    selectedOption={selectedExtName}
+                                    onSelect={setExtName}
+                                    options={extNames}
+                                />
+                            </Flexbox>
+                        )}
+                        <Flexbox alignItems={'center'} sx={{ width: '200px' }}>
+                            <Typography sx={{ mr: 2 }}>Resolution:</Typography>
+                            <ResoultionDropDown
+                                setResolutionValue={setResolutionValue}
+                                setResolution={setResolution}
+                                resolution={resolution}
+                            />
+                        </Flexbox>
                     </Flexbox>
                 </Flexbox>
                 <StyledTabPanel value='1'>
@@ -121,6 +149,17 @@ const ServiceGraph = memo(() => {
                         <GraphSkeleton />
                     ) : (
                         <CoresGraph data={nodesAndCoresData} edges={edges} setZoomedTime={setZoomedTime} />
+                    )}
+                </StyledTabPanel>
+                <StyledTabPanel value='6'>
+                    {extNamesLoading || extGraphLoading ? (
+                        <GraphSkeleton />
+                    ) : !extNames?.length ? (
+                        <Flexbox justifyContent={'center'} alignItems={'center'} sx={{ height: '100%' }}>
+                            <Typography>No additional metrics for this service</Typography>
+                        </Flexbox>
+                    ) : (
+                        <ExtMetricGraph data={extGraphData} edges={edges} setZoomedTime={setZoomedTime} />
                     )}
                 </StyledTabPanel>
             </TabContext>

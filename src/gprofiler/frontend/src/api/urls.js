@@ -35,6 +35,8 @@ export const DATA_URLS = {
     GET_LAST_HTML: `${API_PREFIX}/metrics/html_metadata`,
     GET_INSTANCE_TYPE: `${API_PREFIX}/metrics/instance_type_count`,
     GET_GRAPH_METRICS: `${API_PREFIX}/metrics/graph`,
+    GET_METRICS_EXT_NAMES: `${API_PREFIX}/metrics/ext/names`,
+    GET_METRICS_EXT_GRAPH: `${API_PREFIX}/metrics/ext/graph`,
     GET_FUCNTION_CPU_GRAPH: `${API_PREFIX}/metrics/function_cpu`,
     GET_NODES_AND_CORES_GRAPH_METRICS: `${API_PREFIX}/metrics/graph/nodes_and_cores`,
     GET_SAMPLES: `${API_PREFIX}/metrics/samples`,
