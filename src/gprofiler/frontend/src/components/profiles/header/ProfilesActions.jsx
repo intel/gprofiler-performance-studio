@@ -24,7 +24,7 @@ import { useLocation } from 'react-router';
 
 import Tooltip from '@/components/common/dataDisplay/muiToolTip/Tooltip';
 import DotsMenu from '@/components/common/dotsMenu/DotsMenu';
-import { COPY_ONLY_IN_HTTPS } from '@/utils/consts';
+import { COPY_ONLY_IN_HTTPS, PROFILES_VIEWS } from '@/utils/consts';
 import { isPathSecure } from '@/utils/generalUtils';
 
 import { DATA_URLS } from '../../../api/urls';
@@ -33,6 +33,7 @@ import { FgContext, SelectorsContext } from '../../../states';
 import { FilterTagsContext } from '../../../states/filters/FiltersTagsContext';
 import { COLORS } from '../../../theme/colors';
 import { buildAbsolutePermaLink } from '../../../utils/fgUtils';
+import { buildTableViewCsv } from '../../../utils/tableViewUtils';
 import Icon from '../../common/icon/Icon';
 import { ICONS_NAMES } from '../../common/icon/iconsData';
 
@@ -58,8 +59,8 @@ const DownloadLink = ({ serviceName, timeSelection, activeFilters, fileType, dow
 const ProfilesActions = ({ isGrayedOut }) => {
     const [anchorEl, setAnchorEl] = useState(null);
 
-    const { isFgDisplayed } = useContext(FgContext);
-    const { timeSelection, selectedService, ignoreZeros, setIgnoreZeros, absoluteTimeSelection } =
+    const { isFgDisplayed, tableViewRows } = useContext(FgContext);
+    const { timeSelection, selectedService, ignoreZeros, setIgnoreZeros, absoluteTimeSelection, viewMode } =
         useContext(SelectorsContext);
     const { activeFilterTag } = useContext(FilterTagsContext);
 
@@ -77,6 +78,23 @@ const ProfilesActions = ({ isGrayedOut }) => {
         }
         handleClose();
     }, [handleClose, isFgDisplayed]);
+
+    const isTableView = viewMode === PROFILES_VIEWS.table;
+
+    const onClickDownloadTable = useCallback(() => {
+        if (isTableView && tableViewRows.length > 0) {
+            const blob = new window.Blob([buildTableViewCsv(tableViewRows)], { type: 'text/csv;charset=utf-8;' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${selectedService || 'profile'}-table.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        }
+        handleClose();
+    }, [handleClose, isTableView, tableViewRows, selectedService]);
 
     const onCopyPermalinkClick = (e) => {
         if (isPathSecure()) {
@@ -99,6 +117,15 @@ const ProfilesActions = ({ isGrayedOut }) => {
                             <Icon name={ICONS_NAMES.Download} color={COLORS.BLUE_7} />
                         </ListItemIcon>
                         <ListItemText>Download Flame Graph</ListItemText>
+                    </MenuItem>
+                )}
+
+                {isTableView && (
+                    <MenuItem onClick={onClickDownloadTable} disabled={tableViewRows.length === 0}>
+                        <ListItemIcon>
+                            <Icon name={ICONS_NAMES.Download} color={COLORS.BLUE_7} />
+                        </ListItemIcon>
+                        <ListItemText>Download Table</ListItemText>
                     </MenuItem>
                 )}
 

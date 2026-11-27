@@ -54,8 +54,16 @@ import ServiceView from './views/service/ServiceView';
 import TableView from './views/table/TableView';
 
 const ProfilesViews = () => {
-    const { fgOriginData, lastWeekOriginData, zoomedFgData, setZoomedFgData, framesSelected, setIsFGEmpty, isFGEmpty } =
-        useContext(FgContext);
+    const {
+        fgOriginData,
+        lastWeekOriginData,
+        zoomedFgData,
+        setZoomedFgData,
+        framesSelected,
+        setIsFGEmpty,
+        isFGEmpty,
+        setTableViewRows,
+    } = useContext(FgContext);
     const { lastHtmlData } = useGetFgMetrics({});
 
     const { viewMode, selectedService, timeSelection } = useContext(SelectorsContext);
@@ -238,6 +246,12 @@ const ProfilesViews = () => {
         return [];
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchedData, lastWeekOriginData, viewMode]);
+
+    // Share the rows shown in Table View with the header menu, so it can offer them as a CSV download
+    useEffect(() => {
+        setTableViewRows(tableViewData);
+        return () => setTableViewRows([]);
+    }, [tableViewData, setTableViewRows]);
 
     const getTooltipData = useCallback(
         (nodeData, renderEngine, mouse) => {
