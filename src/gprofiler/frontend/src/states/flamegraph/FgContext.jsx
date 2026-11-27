@@ -43,6 +43,7 @@ export const FgProvider = ({ children }) => {
     const [mineSweeperMode, setMineSweeperMode] = useState(false);
     const [framesSelected, setFramesSelected] = useState([]);
     const [isFGEmpty, setIsFGEmpty] = useState(false);
+    const [tableViewRows, setTableViewRows] = useState([]);
 
     useTruncationQueryParams({ viewTruncated, setViewTruncated });
 
@@ -85,6 +86,8 @@ export const FgProvider = ({ children }) => {
                 setFramesSelected,
                 isFGEmpty,
                 setIsFGEmpty,
+                tableViewRows,
+                setTableViewRows,
             }}>
             {children}
         </FgContext.Provider>
